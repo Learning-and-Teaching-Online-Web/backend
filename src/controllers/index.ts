@@ -1,0 +1,1 @@
+export * as SubjectControllers from "./subject.controller";
