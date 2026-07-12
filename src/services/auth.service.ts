@@ -23,7 +23,10 @@ export const authService = {
       }
     });
 
-    if (error) throw JSON.stringify(error);
+    if (error) {
+      console.error("Supabase auth signUp error details:", error);
+      throw new Error(error.message || `AuthError: ${error.status || 'unknown'}`);
+    }
     return data.user;
   },
 

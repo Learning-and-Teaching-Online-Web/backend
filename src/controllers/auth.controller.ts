@@ -8,7 +8,7 @@ export const authController = {
       res.status(201).json({ success: true, message: 'Đăng ký thành công', data: user });
     } catch (error: any) {
       console.error('Error in signUp:', error);
-      res.status(400).json({ success: false, error: error.message });
+      res.status(400).json({ success: false, error: error.message || error });
     }
   },
 
@@ -17,7 +17,7 @@ export const authController = {
       const result = await authService.signIn(req.body);
       res.status(200).json({ success: true, message: 'Đăng nhập thành công', data: result });
     } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message });
+      res.status(400).json({ success: false, error: error.message || error });
     }
   },
 

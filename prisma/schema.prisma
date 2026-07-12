@@ -1,0 +1,821 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [pgcrypto, citext, pg_trgm, vector, unaccent]
+  schemas    = ["public", "auth"]
+}
+
+// ============================================
+// 1. ENUMS (public schema)
+// ============================================
+
+enum UserRole {
+  student
+  tutor
+  admin
+
+  @@schema("public")
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+
+  @@schema("public")
+}
+
+enum TeachingMode {
+  online
+  offline
+  both
+
+  @@schema("public")
+}
+
+enum VerificationStatus {
+  pending
+  approved
+  rejected
+
+  @@schema("public")
+}
+
+enum CourseStatus {
+  draft
+  published
+  hidden
+  archived
+
+  @@schema("public")
+}
+
+enum BookingStatus {
+  pending
+  confirmed
+  completed
+  cancelled
+  refunded
+
+  @@schema("public")
+}
+
+enum PaymentStatus {
+  unpaid
+  paid
+  refunded
+  failed
+
+  @@schema("public")
+}
+
+enum TransactionStatus {
+  pending
+  success
+  failed
+  refunded
+
+  @@schema("public")
+}
+
+enum PayoutStatus {
+  pending
+  processing
+  completed
+  failed
+
+  @@schema("public")
+}
+
+enum SessionStatus {
+  scheduled
+  ongoing
+  completed
+  cancelled
+  no_show
+
+  @@schema("public")
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  late
+  excused
+
+  @@schema("public")
+}
+
+enum AttendanceMethod {
+  manual
+  auto
+  self
+
+  @@schema("public")
+}
+
+enum MessageType {
+  text
+  image
+  file
+  system
+  whiteboard
+
+  @@schema("public")
+}
+
+enum RoomType {
+  direct
+  group
+  classroom
+
+  @@schema("public")
+}
+
+enum QuizQuestionType {
+  multiple_choice
+  true_false
+  fill_in_blank
+  essay
+
+  @@schema("public")
+}
+
+enum QuizStatus {
+  draft
+  published
+  archived
+
+  @@schema("public")
+}
+
+// ============================================
+// 2. SUPABASE AUTH USER REFERENCE (auth schema)
+// ============================================
+
+model AuthUser {
+  id    String  @id @db.Uuid
+  email String?
+
+  users User?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+// ============================================
+// 3. MODELS (public schema)
+// ============================================
+
+model User {
+  user_id         String     @id @db.Uuid
+  email           String     @unique @db.Citext
+  password_hash   String?
+  full_name       String
+  phone           String?
+  avatar_url      String?
+  role            UserRole   @default(student)
+  status          UserStatus @default(active)
+  email_verified  Boolean    @default(false)
+  social_provider String?
+  social_id       String?
+  metadata        Json?      @default("{}")
+  created_at      DateTime   @default(now()) @db.Timestamptz
+  updated_at      DateTime   @default(now()) @db.Timestamptz
+  last_login_at   DateTime?  @db.Timestamptz
+
+  // Relations
+  authUser           AuthUser           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  tutor_profile      TutorProfile?
+  student_profile    StudentProfile?
+  wallets            Wallet?
+  user_addresses     UserAddress[]
+  admin_logs         AdminLog[]
+  attendances        Attendance[]
+  session_recordings SessionRecording[]
+  messages           Message[]
+  documents          Document[]
+  ai_conversations   AIConversation[]
+  whiteboard_states  WhiteboardState[]
+  tutor_certificates TutorCertificate[]
+  bookings           Booking[]
+  transactions       Transaction[]
+
+  @@index([role, status], map: "idx_users_role_status")
+  @@index([social_provider, social_id], map: "idx_users_social")
+  @@map("users")
+  @@schema("public")
+}
+
+model TutorProfile {
+  tutor_id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String             @unique @db.Uuid
+  bio              String?
+  education        String?
+  experience_years Int?               @default(0) @db.SmallInt
+  hourly_rate      Decimal            @default(0) @db.Decimal(10, 2)
+  subjects         Json               @default("[]")
+  specialties      Json?              @default("[]")
+  rating           Decimal?           @default(0) @db.Decimal(2, 1)
+  review_count     Int                @default(0)
+  teaching_mode    TeachingMode       @default(both)
+  province         String?
+  district         String?
+  verified_status  VerificationStatus @default(pending)
+  is_featured      Boolean            @default(false)
+  created_at       DateTime           @default(now()) @db.Timestamptz
+  updated_at       DateTime           @default(now()) @db.Timestamptz
+
+  // Relations
+  user          User               @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  certificates  TutorCertificate[]
+  courses       Course[]
+  payouts       Payout[]
+  reviews       Review[]
+  favorites     Favorite[]
+  matching_logs MatchingLog[]
+
+  @@index([verified_status, rating(sort: Desc)], map: "idx_tutor_profiles_verified")
+  @@index([hourly_rate], map: "idx_tutor_profiles_rate")
+  @@index([province, district], map: "idx_tutor_profiles_location")
+  @@index([subjects], type: Gin, map: "idx_tutor_profiles_subjects")
+  @@map("tutor_profiles")
+  @@schema("public")
+}
+
+model StudentProfile {
+  student_id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String        @unique @db.Uuid
+  grade_level        String?
+  learning_goals     String?
+  preferred_subjects Json?         @default("[]")
+  preferred_mode     TeachingMode?
+  budget_min         Decimal?      @db.Decimal(10, 2)
+  budget_max         Decimal?      @db.Decimal(10, 2)
+  created_at         DateTime      @default(now()) @db.Timestamptz
+  updated_at         DateTime      @default(now()) @db.Timestamptz
+
+  // Relations
+  user          User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  bookings      Booking[]
+  reviews       Review[]
+  favorites     Favorite[]
+  quiz_attempts QuizAttempt[]
+  matching_logs MatchingLog[]
+
+  @@map("student_profiles")
+  @@schema("public")
+}
+
+model TutorCertificate {
+  cert_id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tutor_id          String             @db.Uuid
+  title             String
+  file_url          String
+  file_type         String?
+  issued_by         String?
+  issued_date       DateTime?          @db.Date
+  expiry_date       DateTime?          @db.Date
+  verified_by_admin String?            @db.Uuid
+  status            VerificationStatus @default(pending)
+  admin_note        String?
+  created_at        DateTime           @default(now()) @db.Timestamptz
+  updated_at        DateTime           @default(now()) @db.Timestamptz
+
+  // Relations
+  tutor TutorProfile @relation(fields: [tutor_id], references: [tutor_id], onDelete: Cascade)
+  admin User?        @relation(fields: [verified_by_admin], references: [user_id], onDelete: SetNull)
+
+  @@index([tutor_id], map: "idx_certificates_tutor")
+  @@index([status], map: "idx_certificates_status")
+  @@map("tutor_certificates")
+  @@schema("public")
+}
+
+model Course {
+  course_id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tutor_id         String       @db.Uuid
+  title            String
+  subject          String
+  description      String?
+  price            Decimal      @db.Decimal(10, 2)
+  duration_minutes Int          @default(60) @db.SmallInt
+  max_students     Int          @default(1) @db.SmallInt
+  total_sessions   Int          @default(1) @db.SmallInt
+  level            String?
+  status           CourseStatus @default(draft)
+  thumbnail_url    String?
+  tags             Json?        @default("[]")
+  created_at       DateTime     @default(now()) @db.Timestamptz
+  updated_at       DateTime     @default(now()) @db.Timestamptz
+
+  // Relations
+  tutor            TutorProfile     @relation(fields: [tutor_id], references: [tutor_id], onDelete: Cascade)
+  schedules        CourseSchedule[]
+  bookings         Booking[]
+  documents        Document[]
+  ai_conversations AIConversation[]
+  quizzes          Quiz[]
+
+  @@index([tutor_id, status], map: "idx_courses_tutor")
+  @@index([subject, status, price], map: "idx_courses_subject")
+  @@index([status, created_at(sort: Desc)], map: "idx_courses_status")
+  @@index([tags], type: Gin, map: "idx_courses_tags")
+  @@map("courses")
+  @@schema("public")
+}
+
+model CourseSchedule {
+  schedule_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id      String    @db.Uuid
+  start_time     DateTime  @db.Timestamptz
+  end_time       DateTime  @db.Timestamptz
+  is_recurring   Boolean   @default(false)
+  day_of_week    Int?      @db.SmallInt
+  recurrence_end DateTime? @db.Date
+  is_booked      Boolean   @default(false)
+  max_slot       Int       @default(1) @db.SmallInt
+  created_at     DateTime  @default(now()) @db.Timestamptz
+
+  // Relations
+  course   Course    @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([course_id, start_time], map: "idx_schedules_course")
+  @@index([is_booked, start_time], map: "idx_schedules_available")
+  @@map("course_schedules")
+  @@schema("public")
+}
+
+model Booking {
+  booking_id       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id       String        @db.Uuid
+  course_id        String        @db.Uuid
+  schedule_id      String        @db.Uuid
+  status           BookingStatus @default(pending)
+  payment_status   PaymentStatus @default(unpaid)
+  total_amount     Decimal       @db.Decimal(10, 2)
+  currency         String        @default("VND")
+  notes            String?
+  cancelled_by     String?       @db.Uuid
+  cancelled_reason String?
+  cancelled_at     DateTime?     @db.Timestamptz
+  created_at       DateTime      @default(now()) @db.Timestamptz
+  updated_at       DateTime      @default(now()) @db.Timestamptz
+
+  // Relations
+  student         StudentProfile @relation(fields: [student_id], references: [student_id])
+  course          Course         @relation(fields: [course_id], references: [course_id])
+  schedule        CourseSchedule @relation(fields: [schedule_id], references: [schedule_id])
+  cancelledByUser User?          @relation(fields: [cancelled_by], references: [user_id], onDelete: SetNull)
+  transactions    Transaction[]
+  class_sessions  ClassSession[]
+  chat_rooms      ChatRoom[]
+  reviews         Review?
+
+  @@index([student_id, status, created_at(sort: Desc)], map: "idx_bookings_student")
+  @@index([course_id], map: "idx_bookings_course")
+  @@index([schedule_id], map: "idx_bookings_schedule")
+  @@map("bookings")
+  @@schema("public")
+}
+
+model Transaction {
+  transaction_id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id            String            @db.Uuid
+  user_id               String            @db.Uuid
+  amount                Decimal           @db.Decimal(10, 2)
+  payment_method        String            @default("zalopay")
+  zalopay_order_id      String?
+  zalopay_trans_id      String?
+  zalopay_callback_data Json?
+  status                TransactionStatus @default(pending)
+  paid_at               DateTime?         @db.Timestamptz
+  created_at            DateTime          @default(now()) @db.Timestamptz
+  updated_at            DateTime          @default(now()) @db.Timestamptz
+
+  // Relations
+  booking Booking @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [user_id])
+
+  @@index([booking_id], map: "idx_transactions_booking")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_transactions_user")
+  @@map("transactions")
+  @@schema("public")
+}
+
+model Wallet {
+  wallet_id  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @unique @db.Uuid
+  balance    Decimal  @default(0) @db.Decimal(10, 2)
+  currency   String   @default("VND")
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("wallets")
+  @@schema("public")
+}
+
+model Payout {
+  payout_id    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tutor_id     String       @db.Uuid
+  amount       Decimal      @db.Decimal(10, 2)
+  period_start DateTime     @db.Date
+  period_end   DateTime     @db.Date
+  bank_account String?
+  bank_name    String?
+  status       PayoutStatus @default(pending)
+  processed_at DateTime?    @db.Timestamptz
+  created_at   DateTime     @default(now()) @db.Timestamptz
+
+  // Relations
+  tutor TutorProfile @relation(fields: [tutor_id], references: [tutor_id])
+
+  @@index([tutor_id, created_at(sort: Desc)], map: "idx_payouts_tutor")
+  @@index([status], map: "idx_payouts_status")
+  @@map("payouts")
+  @@schema("public")
+}
+
+model ClassSession {
+  session_id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id          String        @db.Uuid
+  room_id             String
+  title               String?
+  scheduled_start     DateTime      @db.Timestamptz
+  scheduled_end       DateTime      @db.Timestamptz
+  actual_start        DateTime?     @db.Timestamptz
+  actual_end          DateTime?     @db.Timestamptz
+  status              SessionStatus @default(scheduled)
+  whiteboard_snapshot String?
+  notes               String?
+  created_at          DateTime      @default(now()) @db.Timestamptz
+
+  // Relations
+  booking            Booking            @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
+  attendances        Attendance[]
+  session_recordings SessionRecording[]
+  chat_rooms         ChatRoom[]
+  ai_conversations   AIConversation[]
+  whiteboard_states  WhiteboardState[]
+
+  @@index([booking_id, scheduled_start], map: "idx_sessions_booking")
+  @@index([room_id], map: "idx_sessions_room")
+  @@index([status, scheduled_start], map: "idx_sessions_status")
+  @@map("class_sessions")
+  @@schema("public")
+}
+
+model Attendance {
+  attendance_id    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id       String            @db.Uuid
+  user_id          String            @db.Uuid
+  check_in_time    DateTime?         @db.Timestamptz
+  check_out_time   DateTime?         @db.Timestamptz
+  duration_minutes Int?              @db.SmallInt
+  status           AttendanceStatus  @default(absent)
+  method           AttendanceMethod? @default(manual)
+  created_at       DateTime          @default(now()) @db.Timestamptz
+
+  // Relations
+  session ClassSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
+  user    User         @relation(fields: [user_id], references: [user_id])
+
+  @@index([session_id], map: "idx_attendances_session")
+  @@index([user_id], map: "idx_attendances_user")
+  @@map("attendances")
+  @@schema("public")
+}
+
+model SessionRecording {
+  recording_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id       String    @db.Uuid
+  file_url         String
+  file_size_mb     Decimal?  @db.Decimal(8, 2)
+  duration_seconds Int?
+  recorded_by      String    @db.Uuid
+  is_processed     Boolean   @default(false)
+  expires_at       DateTime? @db.Timestamptz
+  created_at       DateTime  @default(now()) @db.Timestamptz
+
+  // Relations
+  session ClassSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
+  user    User         @relation(fields: [recorded_by], references: [user_id])
+
+  @@index([session_id], map: "idx_recordings_session")
+  @@map("session_recordings")
+  @@schema("public")
+}
+
+model ChatRoom {
+  room_id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id   String?  @db.Uuid
+  booking_id   String?  @db.Uuid
+  room_type    RoomType @default(direct)
+  title        String?
+  participants Json?    @default("[]")
+  created_at   DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  session  ClassSession? @relation(fields: [session_id], references: [session_id], onDelete: SetNull)
+  booking  Booking?      @relation(fields: [booking_id], references: [booking_id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([session_id], map: "idx_chat_rooms_session")
+  @@index([booking_id], map: "idx_chat_rooms_booking")
+  @@index([participants], type: Gin, map: "idx_chat_rooms_participants")
+  @@map("chat_rooms")
+  @@schema("public")
+}
+
+model Message {
+  message_id   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id      String      @db.Uuid
+  sender_id    String      @db.Uuid
+  content      String?
+  message_type MessageType @default(text)
+  file_url     String?
+  file_name    String?
+  is_read      Boolean     @default(false)
+  read_at      DateTime?   @db.Timestamptz
+  reply_to     String?     @db.Uuid
+  sent_at      DateTime    @default(now()) @db.Timestamptz
+  created_at   DateTime    @default(now()) @db.Timestamptz
+
+  // Relations
+  room    ChatRoom  @relation(fields: [room_id], references: [room_id], onDelete: Cascade)
+  sender  User      @relation(fields: [sender_id], references: [user_id])
+  parent  Message?  @relation("MessageReplies", fields: [reply_to], references: [message_id], onDelete: SetNull)
+  replies Message[] @relation("MessageReplies")
+
+  @@index([room_id, sent_at(sort: Desc)], map: "idx_messages_room")
+  @@index([sender_id, is_read], map: "idx_messages_sender")
+  @@index([reply_to], map: "idx_messages_reply")
+  @@map("messages")
+  @@schema("public")
+}
+
+model Review {
+  review_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id      String   @unique @db.Uuid
+  student_id      String   @db.Uuid
+  tutor_id        String   @db.Uuid
+  rating          Int      @db.SmallInt
+  professionalism Int?     @db.SmallInt
+  communication   Int?     @db.SmallInt
+  punctuality     Int?     @db.SmallInt
+  comment         String?
+  is_visible      Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.Timestamptz
+  updated_at      DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  booking Booking        @relation(fields: [booking_id], references: [booking_id])
+  student StudentProfile @relation(fields: [student_id], references: [student_id])
+  tutor   TutorProfile   @relation(fields: [tutor_id], references: [tutor_id])
+
+  @@index([tutor_id, created_at(sort: Desc)], map: "idx_reviews_tutor")
+  @@index([student_id], map: "idx_reviews_student")
+  @@map("reviews")
+  @@schema("public")
+}
+
+model Favorite {
+  favorite_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id  String   @db.Uuid
+  tutor_id    String   @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  student StudentProfile @relation(fields: [student_id], references: [student_id])
+  tutor   TutorProfile   @relation(fields: [tutor_id], references: [tutor_id])
+
+  @@unique([student_id, tutor_id])
+  @@index([student_id], map: "idx_favorites_student")
+  @@index([tutor_id], map: "idx_favorites_tutor")
+  @@map("favorites")
+  @@schema("public")
+}
+
+model Document {
+  doc_id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id      String    @db.Uuid
+  uploaded_by    String    @db.Uuid
+  file_url       String
+  file_type      String
+  title          String
+  description    String?
+  extracted_text String?
+  is_indexed     Boolean   @default(false)
+  indexed_at     DateTime? @db.Timestamptz
+  metadata       Json?     @default("{}")
+  created_at     DateTime  @default(now()) @db.Timestamptz
+
+  // Relations
+  course Course          @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  user   User            @relation(fields: [uploaded_by], references: [user_id])
+  chunks DocumentChunk[]
+
+  @@index([course_id, created_at(sort: Desc)], map: "idx_documents_course")
+  @@index([uploaded_by], map: "idx_documents_uploaded_by")
+  @@map("documents")
+  @@schema("public")
+}
+
+model DocumentChunk {
+  chunk_id    String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  doc_id      String                       @db.Uuid
+  content     String
+  chunk_index Int
+  token_count Int?
+  embedding   Unsupported("vector(1536)")?
+  created_at  DateTime                     @default(now()) @db.Timestamptz
+
+  // Relations
+  document Document @relation(fields: [doc_id], references: [doc_id], onDelete: Cascade)
+
+  @@index([doc_id], map: "idx_document_chunks_doc")
+  @@map("document_chunks")
+  @@schema("public")
+}
+
+model AIConversation {
+  conversation_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String   @db.Uuid
+  session_id      String?  @db.Uuid
+  course_id       String?  @db.Uuid
+  role            String
+  message         String
+  model_used      String?
+  tokens_used     Int?
+  timestamp       DateTime @default(now()) @db.Timestamptz
+  created_at      DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  user    User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  session ClassSession? @relation(fields: [session_id], references: [session_id], onDelete: SetNull)
+  course  Course?       @relation(fields: [course_id], references: [course_id], onDelete: SetNull)
+
+  @@index([user_id, timestamp(sort: Desc)], map: "idx_ai_conversations_user")
+  @@index([session_id], map: "idx_ai_conversations_session")
+  @@map("ai_conversations")
+  @@schema("public")
+}
+
+model Quiz {
+  quiz_id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id          String     @db.Uuid
+  title              String
+  description        String?
+  generated_by_ai    Boolean    @default(false)
+  ai_model_version   String?
+  time_limit_minutes Int?
+  max_attempts       Int        @default(1)
+  passing_score      Int?       @db.SmallInt
+  status             QuizStatus @default(draft)
+  created_at         DateTime   @default(now()) @db.Timestamptz
+
+  // Relations
+  course    Course         @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([course_id, status], map: "idx_quizzes_course")
+  @@map("quizzes")
+  @@schema("public")
+}
+
+model QuizQuestion {
+  question_id    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quiz_id        String           @db.Uuid
+  question_text  String
+  question_type  QuizQuestionType @default(multiple_choice)
+  options_json   Json?
+  correct_answer String?
+  explanation    String?
+  points         Int              @default(1) @db.SmallInt
+  order_index    Int              @default(0)
+  created_at     DateTime         @default(now()) @db.Timestamptz
+
+  // Relations
+  quiz Quiz @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade)
+
+  @@index([quiz_id, order_index], map: "idx_quiz_questions_quiz")
+  @@map("quiz_questions")
+  @@schema("public")
+}
+
+model QuizAttempt {
+  attempt_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id       String    @db.Uuid
+  quiz_id          String    @db.Uuid
+  score            Decimal?  @db.Decimal(5, 2)
+  total_points     Int?
+  answers_json     Json?     @default("[]")
+  started_at       DateTime  @default(now()) @db.Timestamptz
+  completed_at     DateTime? @db.Timestamptz
+  duration_seconds Int?
+  is_passed        Boolean?
+  created_at       DateTime  @default(now()) @db.Timestamptz
+
+  // Relations
+  student StudentProfile @relation(fields: [student_id], references: [student_id])
+  quiz    Quiz           @relation(fields: [quiz_id], references: [quiz_id])
+
+  @@index([student_id, created_at(sort: Desc)], map: "idx_quiz_attempts_student")
+  @@index([quiz_id], map: "idx_quiz_attempts_quiz")
+  @@map("quiz_attempts")
+  @@schema("public")
+}
+
+model MatchingLog {
+  log_id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id        String   @db.Uuid
+  tutor_id          String   @db.Uuid
+  match_score       Decimal? @db.Decimal(5, 2)
+  algorithm_version String?
+  factors_json      Json?
+  is_clicked        Boolean  @default(false)
+  is_booked         Boolean  @default(false)
+  created_at        DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  student StudentProfile @relation(fields: [student_id], references: [student_id])
+  tutor   TutorProfile   @relation(fields: [tutor_id], references: [tutor_id])
+
+  @@index([student_id, created_at(sort: Desc)], map: "idx_matching_logs_student")
+  @@index([tutor_id], map: "idx_matching_logs_tutor")
+  @@map("matching_logs")
+  @@schema("public")
+}
+
+model WhiteboardState {
+  state_id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id        String   @db.Uuid
+  drawing_data_json Json
+  timestamp         DateTime @default(now()) @db.Timestamptz
+  created_by        String   @db.Uuid
+  created_at        DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  session ClassSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
+  user    User         @relation(fields: [created_by], references: [user_id])
+
+  @@index([session_id, timestamp], map: "idx_whiteboard_session")
+  @@map("whiteboard_states")
+  @@schema("public")
+}
+
+model AdminLog {
+  log_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  admin_id     String   @db.Uuid
+  action       String
+  target_type  String
+  target_id    String?  @db.Uuid
+  details_json Json?
+  ip_address   String?
+  created_at   DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  admin User @relation(fields: [admin_id], references: [user_id])
+
+  @@index([admin_id, created_at(sort: Desc)], map: "idx_admin_logs_admin")
+  @@index([target_type, target_id], map: "idx_admin_logs_target")
+  @@map("admin_logs")
+  @@schema("public")
+}
+
+model SystemConfig {
+  config_key   String   @id
+  config_value String?
+  description  String?
+  updated_at   DateTime @default(now()) @db.Timestamptz
+
+  @@map("system_configs")
+  @@schema("public")
+}
+
+model UserAddress {
+  address_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  province   String?
+  district   String?
+  ward       String?
+  detail     String?
+  is_default Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_user_addresses_user")
+  @@map("user_addresses")
+  @@schema("public")
+}
