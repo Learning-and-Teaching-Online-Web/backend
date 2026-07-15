@@ -1,121 +1,139 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { prisma } from '../config/prisma';
 
 export const courseRepository = {
   // Find course details including tutor, schedules, documents, and quizzes
   async findById(supabase: SupabaseClient, courseId: string) {
-    const { data, error } = await supabase
-      .from('courses')
-      .select('*, tutor:tutor_profiles(*, user:users(full_name, avatar_url)), schedules:course_schedules(*), documents(*), quizzes(*)')
-      .eq('course_id', courseId)
-      .single();
+    const data = await prisma.course.findUnique({
+      where: { course_id: courseId },
+      include: {
+        tutor: {
+          include: {
+            user: {
+              select: { full_name: true, avatar_url: true }
+            }
+          }
+        },
+        schedules: true,
+        documents: true,
+        quizzes: true,
+      }
+    });
 
-    if (error) throw error;
     return data;
   },
 
   // Find all courses with pagination and filter support
   async findAll(supabase: SupabaseClient, filters: any) {
-    let query = supabase
-      .from('courses')
-      .select('*, tutor:tutor_profiles(*, user:users(full_name, avatar_url))', { count: 'exact' });
+    const where: any = {};
 
-    if (filters.subject) {
-      query = query.eq('subject', filters.subject);
+    if (filters.subject) where.subject = filters.subject;
+    if (filters.level) where.level = filters.level;
+
+    if (filters.min_price || filters.max_price) {
+      where.price = {};
+      if (filters.min_price) where.price.gte = filters.min_price;
+      if (filters.max_price) where.price.lte = filters.max_price;
     }
-    if (filters.level) {
-      query = query.eq('level', filters.level);
-    }
-    if (filters.min_price) {
-      query = query.gte('price', filters.min_price);
-    }
-    if (filters.max_price) {
-      query = query.lte('price', filters.max_price);
-    }
-    if (filters.tutor_id) {
-      query = query.eq('tutor_id', filters.tutor_id);
-    }
-    if (filters.status) {
-      query = query.eq('status', filters.status);
-    }
+
+    if (filters.tutor_id) where.tutor_id = filters.tutor_id;
+    if (filters.status) where.status = filters.status;
+
     if (filters.search) {
-      query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+      where.OR = [
+        { title: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } }
+      ];
     }
 
     const page = parseInt(filters.page) || 1;
     const limit = parseInt(filters.limit) || 10;
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+    const skip = (page - 1) * limit;
 
-    const { data, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(from, to);
+    const [data, count] = await Promise.all([
+      prisma.course.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          tutor: {
+            include: {
+              user: {
+                select: { full_name: true, avatar_url: true }
+              }
+            }
+          }
+        }
+      }),
+      prisma.course.count({ where })
+    ]);
 
-    if (error) throw error;
-    return { data, count: count || 0 };
+    const formattedData = data.map((course: any) => ({
+      ...course,
+      price: Number(course.price)
+    }));
+
+    return { data: formattedData, count };
   },
 
   // Insert a new course
   async insert(supabase: SupabaseClient, courseData: any) {
-    const { data, error } = await supabase
-      .from('courses')
-      .insert(courseData)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await prisma.course.create({
+      data: courseData
+    });
     return data;
   },
 
   // Update an existing course
   async update(supabase: SupabaseClient, courseId: string, courseData: any) {
-    const { data, error } = await supabase
-      .from('courses')
-      .update(courseData)
-      .eq('course_id', courseId)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await prisma.course.update({
+      where: { course_id: courseId },
+      data: courseData
+    });
     return data;
   },
 
   // Delete a course (e.g. by setting status to archived or deleting it)
   async delete(supabase: SupabaseClient, courseId: string) {
-    // If we want a soft delete, we can update status to 'archived'
-    const { data, error } = await supabase
-      .from('courses')
-      .update({ status: 'archived' })
-      .eq('course_id', courseId)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await prisma.course.update({
+      where: { course_id: courseId },
+      data: { status: 'archived' }
+    });
     return data;
   },
 
   // Add schedule to a course
   async addSchedule(supabase: SupabaseClient, scheduleData: any) {
-    const { data, error } = await supabase
-      .from('course_schedules')
-      .insert(scheduleData)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await prisma.courseSchedule.create({
+      data: scheduleData
+    });
     return data;
   },
 
   // Find existing schedules to prevent overlap
   async findOverlappingSchedules(supabase: SupabaseClient, tutorId: string, startTime: string, endTime: string) {
-    const { data, error } = await supabase
-      .from('course_schedules')
-      .select('*, courses(tutor_id)')
-      .eq('courses.tutor_id', tutorId)
-      .or(`and(start_time.lte.${startTime},end_time.gt.${startTime}),and(start_time.lt.${endTime},end_time.gte.${endTime}),and(start_time.gte.${startTime},end_time.lte.${endTime})`);
+    const start = new Date(startTime);
+    const end = new Date(endTime);
 
-    if (error) throw error;
-    // PostgREST doesn't support joins filtering in standard select, so let's filter in code to be 100% correct
-    const filtered = data ? data.filter((s: any) => s.courses && s.courses.tutor_id === tutorId) : [];
-    return filtered;
+    const data = await prisma.courseSchedule.findMany({
+      where: {
+        course: {
+          tutor_id: tutorId
+        },
+        OR: [
+          { start_time: { lte: start }, end_time: { gt: start } },
+          { start_time: { lt: end }, end_time: { gte: end } },
+          { start_time: { gte: start }, end_time: { lte: end } }
+        ]
+      },
+      include: {
+        course: {
+          select: { tutor_id: true }
+        }
+      }
+    });
+
+    return data;
   }
 };
