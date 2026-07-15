@@ -166,7 +166,7 @@ export const courseService = {
     return await courseRepository.addSchedule(supabase, payload);
   },
 
-  // List all courses with filtering
+  // List all courses with filtering (public view)
   async listCourses(supabase: SupabaseClient, query: any) {
     const filters = {
       subject: query.subject,
@@ -174,7 +174,30 @@ export const courseService = {
       min_price: query.min_price ? Number(query.min_price) : undefined,
       max_price: query.max_price ? Number(query.max_price) : undefined,
       tutor_id: query.tutor_id,
-      status: query.status || 'published',
+      status: 'published', // Force published for public API
+      search: query.search,
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 10
+    };
+
+    const { data, count } = await courseRepository.findAll(supabase, filters);
+    return { data, total: count, page: filters.page, limit: filters.limit };
+  },
+
+  // List courses for a specific tutor (tutor view)
+  async listMyCourses(supabase: SupabaseClient, userId: string, query: any) {
+    const tutor = await tutorRepository.findByUserId(supabase, userId);
+    if (!tutor) {
+      throw new Error('Hồ sơ gia sư không tồn tại');
+    }
+
+    const filters = {
+      subject: query.subject,
+      level: query.level,
+      min_price: query.min_price ? Number(query.min_price) : undefined,
+      max_price: query.max_price ? Number(query.max_price) : undefined,
+      tutor_id: tutor.tutor_id, // Force tutor_id to current tutor
+      status: query.status, // Allow filtering by any status
       search: query.search,
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 10

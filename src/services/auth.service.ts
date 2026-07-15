@@ -7,7 +7,6 @@ export const authService = {
   // Logic Đăng ký tài khoản
   async signUp(body: any) {
     const { email, password, fullName, phone, gender, dateOfBirth, role } = body;
-    console.log("SignUp User:", { email, fullName, phone, gender, dateOfBirth, role });
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -16,7 +15,7 @@ export const authService = {
         data: {
           full_name: fullName,
           gender,
-          phone,
+          phone: phone,
           date_of_birth: dateOfBirth,
           role,
         },

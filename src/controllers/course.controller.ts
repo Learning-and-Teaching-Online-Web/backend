@@ -82,7 +82,7 @@ export const courseController = {
     }
   },
 
-  // Get list of courses with filtering
+  // Get list of courses with filtering (public view)
   async list(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const client = req.supabase || globalSupabase;
@@ -90,6 +90,25 @@ export const courseController = {
       res.status(200).json({ success: true, data: result.data, total: result.total, page: result.page, limit: result.limit });
     } catch (error: any) {
       console.error('Error in listCourses controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Get list of courses for the current tutor
+  async myCourses(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const client = req.supabase || globalSupabase;
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      const result = await courseService.listMyCourses(client, userId, req.query);
+      res.status(200).json({ success: true, data: result.data, total: result.total, page: result.page, limit: result.limit });
+    } catch (error: any) {
+      console.error('Error in myCourses controller:', error);
       res.status(500).json({ success: false, error: error.message || error });
     }
   },

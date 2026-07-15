@@ -6,6 +6,10 @@ const courseRoutes = Router();
 
 // Public routes or general view routes (still passes through authentication if needed, but here they can just be open or standard verifyAuth)
 courseRoutes.get('/', courseController.list);
+
+// Tutor specific course fetch (must be before /:id)
+courseRoutes.get('/my-courses', verifyAuth, requireRole('tutor'), courseController.myCourses);
+
 courseRoutes.get('/:id', courseController.detail);
 
 // Tutor protected routes

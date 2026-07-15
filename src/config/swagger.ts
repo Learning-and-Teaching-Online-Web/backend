@@ -333,7 +333,6 @@ export const swaggerDocument = {
           { name: "min_price", in: "query", schema: { type: "number" }, description: "Giá tối thiểu" },
           { name: "max_price", in: "query", schema: { type: "number" }, description: "Giá tối đa" },
           { name: "tutor_id", in: "query", schema: { type: "string", format: "uuid" }, description: "Lọc theo gia sư" },
-          { name: "status", in: "query", schema: { type: "string", default: "published" }, description: "Trạng thái khóa học" },
           { name: "search", in: "query", schema: { type: "string" }, description: "Từ khóa tìm kiếm tiêu đề/mô tả" },
           { name: "page", in: "query", schema: { type: "integer", default: 1 }, description: "Số trang" },
           { name: "limit", in: "query", schema: { type: "integer", default: 10 }, description: "Số phần tử mỗi trang" },
@@ -407,6 +406,48 @@ export const swaggerDocument = {
           },
           403: {
             description: "Không đủ quyền hạn (Yêu cầu tài khoản có vai trò tutor)",
+          },
+        },
+      },
+    },
+    "/courses/my-courses": {
+      get: {
+        tags: ["Courses"],
+        summary: "Lấy danh sách khóa học của Gia sư (Chỉ dành cho Tutor)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "subject", in: "query", schema: { type: "string" }, description: "Lọc theo môn học" },
+          { name: "level", in: "query", schema: { type: "string" }, description: "Lọc theo cấp độ" },
+          { name: "min_price", in: "query", schema: { type: "number" }, description: "Giá tối thiểu" },
+          { name: "max_price", in: "query", schema: { type: "number" }, description: "Giá tối đa" },
+          { name: "status", in: "query", schema: { type: "string" }, description: "Trạng thái khóa học (draft, published, hidden...)" },
+          { name: "search", in: "query", schema: { type: "string" }, description: "Từ khóa tìm kiếm tiêu đề/mô tả" },
+          { name: "page", in: "query", schema: { type: "integer", default: 1 }, description: "Số trang" },
+          { name: "limit", in: "query", schema: { type: "integer", default: 10 }, description: "Số phần tử mỗi trang" },
+        ],
+        responses: {
+          200: {
+            description: "Lấy danh sách thành công",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { type: "array", items: { type: "object" } },
+                    total: { type: "integer", example: 15 },
+                    page: { type: "integer", example: 1 },
+                    limit: { type: "integer", example: 10 },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: "Chưa xác thực",
+          },
+          403: {
+            description: "Không đủ quyền (Yêu cầu vai trò tutor)",
           },
         },
       },
