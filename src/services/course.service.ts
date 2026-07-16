@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { courseRepository } from '../repositories/course.repository';
 import { tutorRepository } from '../repositories/tutor.repository';
+import { supabaseAdmin } from '../config/supabase';
 
 export const courseService = {
   // Create a new course
@@ -166,6 +167,30 @@ export const courseService = {
     return await courseRepository.addSchedule(supabase, payload);
   },
 
+  // ─── Internal Helper: fetch tutor + user riêng (tránh phụ thuộc Supabase FK join) ───
+  async _fetchTutorWithUser(supabase: SupabaseClient, tutorId: string) {
+    try {
+      const { data: tutorData, error: tErr } = await supabaseAdmin
+        .from('tutor_profiles')
+        .select('*')
+        .eq('tutor_id', tutorId)
+        .single();
+
+      if (tErr) return null;
+      if (!tutorData) return null;
+
+      const { data: userData, error: uErr } = await supabaseAdmin
+        .from('users')
+        .select('full_name, avatar_url, email')
+        .eq('user_id', tutorData.user_id)
+        .single();
+
+      return { ...tutorData, user: userData || null };
+    } catch (err: any) {
+      return null;
+    }
+  },
+
   // List all courses with filtering
   async listCourses(supabase: SupabaseClient, query: any) {
     const filters = {
@@ -181,11 +206,73 @@ export const courseService = {
     };
 
     const { data, count } = await courseRepository.findAll(supabase, filters);
+
+    // Gắn tutor vào từng course (batch, không cần join Supabase)
+    if (data && data.length > 0) {
+      // Lấy unique tutor_ids
+      const tutorIds = [...new Set(data.map((c: any) => c.tutor_id).filter(Boolean))] as string[];
+
+      // Fetch tất cả tutors cùng lúc
+      if (tutorIds.length > 0) {
+        const { data: tutors } = await supabaseAdmin
+          .from('tutor_profiles')
+          .select('*')
+          .in('tutor_id', tutorIds);
+
+        if (tutors && tutors.length > 0) {
+          // Fetch users cho các tutors
+          const userIds = [...new Set(tutors.map((t: any) => t.user_id).filter(Boolean))] as string[];
+          const { data: users } = await supabaseAdmin
+            .from('users')
+            .select('user_id, full_name, avatar_url, email')
+            .in('user_id', userIds);
+
+          // Build map để tra cứu nhanh
+          const userMap = new Map((users || []).map((u: any) => [u.user_id, u]));
+          const tutorMap = new Map(tutors.map((t: any) => [
+            t.tutor_id,
+            { ...t, user: userMap.get(t.user_id) || null }
+          ]));
+
+          // Gắn tutor vào course (chỉ khi tutor từ Supabase join là null)
+          data.forEach((course: any) => {
+            if (!course.tutor && course.tutor_id) {
+              course.tutor = tutorMap.get(course.tutor_id) || null;
+            } else if (course.tutor && !course.tutor.user && course.tutor.user_id) {
+              course.tutor.user = userMap.get(course.tutor.user_id) || null;
+            }
+          });
+        }
+      }
+    }
+
     return { data, total: count, page: filters.page, limit: filters.limit };
   },
 
   // Get detailed course by id
   async getCourseDetail(supabase: SupabaseClient, courseId: string) {
-    return await courseRepository.findById(supabase, courseId);
+    try {
+      const course = await courseRepository.findById(supabase, courseId);
+      if (!course) return null;
+
+      // Gắn tutor nếu Supabase join trả về null
+      if (!course.tutor && course.tutor_id) {
+        course.tutor = await courseService._fetchTutorWithUser(supabase, course.tutor_id);
+      }
+
+      // Nếu tutor có nhưng user null, fetch user riêng
+      if (course.tutor && !course.tutor.user && course.tutor.user_id) {
+        const { data: userData } = await supabaseAdmin
+          .from('users')
+          .select('full_name, avatar_url, email')
+          .eq('user_id', course.tutor.user_id)
+          .single();
+        course.tutor.user = userData || null;
+      }
+
+      return course;
+    } catch (err: any) {
+      throw err;
+    }
   }
 };

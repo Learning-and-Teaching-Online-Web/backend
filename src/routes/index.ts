@@ -7,6 +7,7 @@ import articleRoutes from './article.routes';
 import favoriteRoutes from './favorite.routes';
 import quizRoutes from './quiz.routes';
 import reviewRoutes from './review.routes';
+import tutorRoutes from './tutor.routes';
 
 const rootRouter = Router();
 
@@ -18,5 +19,6 @@ rootRouter.use('/blog', articleRoutes);
 rootRouter.use('/favorites', favoriteRoutes);
 rootRouter.use('/quizzes', quizRoutes);
 rootRouter.use('/reviews', reviewRoutes);
+rootRouter.use('/tutors', tutorRoutes);
 
 export default rootRouter;
