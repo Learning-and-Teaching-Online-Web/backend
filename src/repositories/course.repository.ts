@@ -51,8 +51,9 @@ export const courseRepository = {
               user: {
                 select: { full_name: true, avatar_url: true }
               }
-            }
-          }
+            },
+          },
+          schedules: true
         },
         orderBy: { created_at: 'desc' },
         skip,
