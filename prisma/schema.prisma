@@ -1,12 +1,11 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["multiSchema", "postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider   = "postgresql"
-  extensions = [pgcrypto, citext, pg_trgm, vector, unaccent]
-  schemas    = ["public", "auth"]
+  extensions = [pgcrypto, citext, pg_trgm, vector, unaccent]
 }
 
 // ============================================
@@ -16,42 +15,32 @@ datasource db {
 enum UserRole {
   student
   tutor
-  admin
-
-  @@schema("public")
+  admin
 }
 
 enum UserStatus {
   active
   suspended
-  deleted
-
-  @@schema("public")
+  deleted
 }
 
 enum TeachingMode {
   online
   offline
-  both
-
-  @@schema("public")
+  both
 }
 
 enum VerificationStatus {
   pending
   approved
-  rejected
-
-  @@schema("public")
+  rejected
 }
 
 enum CourseStatus {
   draft
   published
   hidden
-  archived
-
-  @@schema("public")
+  archived
 }
 
 enum BookingStatus {
@@ -59,36 +48,28 @@ enum BookingStatus {
   confirmed
   completed
   cancelled
-  refunded
-
-  @@schema("public")
+  refunded
 }
 
 enum PaymentStatus {
   unpaid
   paid
   refunded
-  failed
-
-  @@schema("public")
+  failed
 }
 
 enum TransactionStatus {
   pending
   success
   failed
-  refunded
-
-  @@schema("public")
+  refunded
 }
 
 enum PayoutStatus {
   pending
   processing
   completed
-  failed
-
-  @@schema("public")
+  failed
 }
 
 enum SessionStatus {
@@ -96,26 +77,20 @@ enum SessionStatus {
   ongoing
   completed
   cancelled
-  no_show
-
-  @@schema("public")
+  no_show
 }
 
 enum AttendanceStatus {
   present
   absent
   late
-  excused
-
-  @@schema("public")
+  excused
 }
 
 enum AttendanceMethod {
   manual
   auto
-  self
-
-  @@schema("public")
+  self
 }
 
 enum MessageType {
@@ -123,49 +98,33 @@ enum MessageType {
   image
   file
   system
-  whiteboard
-
-  @@schema("public")
+  whiteboard
 }
 
 enum RoomType {
   direct
   group
-  classroom
-
-  @@schema("public")
+  classroom
 }
 
 enum QuizQuestionType {
   multiple_choice
   true_false
   fill_in_blank
-  essay
-
-  @@schema("public")
+  essay
 }
 
 enum QuizStatus {
   draft
   published
-  archived
-
-  @@schema("public")
+  archived
 }
 
 // ============================================
 // 2. SUPABASE AUTH USER REFERENCE (auth schema)
 // ============================================
 
-model AuthUser {
-  id    String  @id @db.Uuid
-  email String?
 
-  users User?
-
-  @@map("users")
-  @@schema("auth")
-}
 
 // ============================================
 // 3. MODELS (public schema)
@@ -188,8 +147,7 @@ model User {
   updated_at      DateTime   @default(now()) @db.Timestamptz
   last_login_at   DateTime?  @db.Timestamptz
 
-  // Relations
-  authUser           AuthUser           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // Relations
   tutor_profile      TutorProfile?
   student_profile    StudentProfile?
   wallets            Wallet?
@@ -207,8 +165,7 @@ model User {
 
   @@index([role, status], map: "idx_users_role_status")
   @@index([social_provider, social_id], map: "idx_users_social")
-  @@map("users")
-  @@schema("public")
+  @@map("users")
 }
 
 model TutorProfile {
@@ -243,8 +200,7 @@ model TutorProfile {
   @@index([hourly_rate], map: "idx_tutor_profiles_rate")
   @@index([province, district], map: "idx_tutor_profiles_location")
   @@index([subjects], type: Gin, map: "idx_tutor_profiles_subjects")
-  @@map("tutor_profiles")
-  @@schema("public")
+  @@map("tutor_profiles")
 }
 
 model StudentProfile {
@@ -267,8 +223,7 @@ model StudentProfile {
   quiz_attempts QuizAttempt[]
   matching_logs MatchingLog[]
 
-  @@map("student_profiles")
-  @@schema("public")
+  @@map("student_profiles")
 }
 
 model TutorCertificate {
@@ -292,8 +247,7 @@ model TutorCertificate {
 
   @@index([tutor_id], map: "idx_certificates_tutor")
   @@index([status], map: "idx_certificates_status")
-  @@map("tutor_certificates")
-  @@schema("public")
+  @@map("tutor_certificates")
 }
 
 model Course {
@@ -325,8 +279,7 @@ model Course {
   @@index([subject, status, price], map: "idx_courses_subject")
   @@index([status, created_at(sort: Desc)], map: "idx_courses_status")
   @@index([tags], type: Gin, map: "idx_courses_tags")
-  @@map("courses")
-  @@schema("public")
+  @@map("courses")
 }
 
 model CourseSchedule {
@@ -347,8 +300,7 @@ model CourseSchedule {
 
   @@index([course_id, start_time], map: "idx_schedules_course")
   @@index([is_booked, start_time], map: "idx_schedules_available")
-  @@map("course_schedules")
-  @@schema("public")
+  @@map("course_schedules")
 }
 
 model Booking {
@@ -380,8 +332,7 @@ model Booking {
   @@index([student_id, status, created_at(sort: Desc)], map: "idx_bookings_student")
   @@index([course_id], map: "idx_bookings_course")
   @@index([schedule_id], map: "idx_bookings_schedule")
-  @@map("bookings")
-  @@schema("public")
+  @@map("bookings")
 }
 
 model Transaction {
@@ -404,8 +355,7 @@ model Transaction {
 
   @@index([booking_id], map: "idx_transactions_booking")
   @@index([user_id, created_at(sort: Desc)], map: "idx_transactions_user")
-  @@map("transactions")
-  @@schema("public")
+  @@map("transactions")
 }
 
 model Wallet {
@@ -419,8 +369,7 @@ model Wallet {
   // Relations
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
-  @@map("wallets")
-  @@schema("public")
+  @@map("wallets")
 }
 
 model Payout {
@@ -440,8 +389,7 @@ model Payout {
 
   @@index([tutor_id, created_at(sort: Desc)], map: "idx_payouts_tutor")
   @@index([status], map: "idx_payouts_status")
-  @@map("payouts")
-  @@schema("public")
+  @@map("payouts")
 }
 
 model ClassSession {
@@ -469,8 +417,7 @@ model ClassSession {
   @@index([booking_id, scheduled_start], map: "idx_sessions_booking")
   @@index([room_id], map: "idx_sessions_room")
   @@index([status, scheduled_start], map: "idx_sessions_status")
-  @@map("class_sessions")
-  @@schema("public")
+  @@map("class_sessions")
 }
 
 model Attendance {
@@ -490,8 +437,7 @@ model Attendance {
 
   @@index([session_id], map: "idx_attendances_session")
   @@index([user_id], map: "idx_attendances_user")
-  @@map("attendances")
-  @@schema("public")
+  @@map("attendances")
 }
 
 model SessionRecording {
@@ -510,8 +456,7 @@ model SessionRecording {
   user    User         @relation(fields: [recorded_by], references: [user_id])
 
   @@index([session_id], map: "idx_recordings_session")
-  @@map("session_recordings")
-  @@schema("public")
+  @@map("session_recordings")
 }
 
 model ChatRoom {
@@ -531,8 +476,7 @@ model ChatRoom {
   @@index([session_id], map: "idx_chat_rooms_session")
   @@index([booking_id], map: "idx_chat_rooms_booking")
   @@index([participants], type: Gin, map: "idx_chat_rooms_participants")
-  @@map("chat_rooms")
-  @@schema("public")
+  @@map("chat_rooms")
 }
 
 model Message {
@@ -558,8 +502,7 @@ model Message {
   @@index([room_id, sent_at(sort: Desc)], map: "idx_messages_room")
   @@index([sender_id, is_read], map: "idx_messages_sender")
   @@index([reply_to], map: "idx_messages_reply")
-  @@map("messages")
-  @@schema("public")
+  @@map("messages")
 }
 
 model Review {
@@ -583,8 +526,7 @@ model Review {
 
   @@index([tutor_id, created_at(sort: Desc)], map: "idx_reviews_tutor")
   @@index([student_id], map: "idx_reviews_student")
-  @@map("reviews")
-  @@schema("public")
+  @@map("reviews")
 }
 
 model Favorite {
@@ -600,8 +542,7 @@ model Favorite {
   @@unique([student_id, tutor_id])
   @@index([student_id], map: "idx_favorites_student")
   @@index([tutor_id], map: "idx_favorites_tutor")
-  @@map("favorites")
-  @@schema("public")
+  @@map("favorites")
 }
 
 model Document {
@@ -625,8 +566,7 @@ model Document {
 
   @@index([course_id, created_at(sort: Desc)], map: "idx_documents_course")
   @@index([uploaded_by], map: "idx_documents_uploaded_by")
-  @@map("documents")
-  @@schema("public")
+  @@map("documents")
 }
 
 model DocumentChunk {
@@ -642,8 +582,7 @@ model DocumentChunk {
   document Document @relation(fields: [doc_id], references: [doc_id], onDelete: Cascade)
 
   @@index([doc_id], map: "idx_document_chunks_doc")
-  @@map("document_chunks")
-  @@schema("public")
+  @@map("document_chunks")
 }
 
 model AIConversation {
@@ -665,8 +604,7 @@ model AIConversation {
 
   @@index([user_id, timestamp(sort: Desc)], map: "idx_ai_conversations_user")
   @@index([session_id], map: "idx_ai_conversations_session")
-  @@map("ai_conversations")
-  @@schema("public")
+  @@map("ai_conversations")
 }
 
 model Quiz {
@@ -688,8 +626,7 @@ model Quiz {
   attempts  QuizAttempt[]
 
   @@index([course_id, status], map: "idx_quizzes_course")
-  @@map("quizzes")
-  @@schema("public")
+  @@map("quizzes")
 }
 
 model QuizQuestion {
@@ -708,8 +645,7 @@ model QuizQuestion {
   quiz Quiz @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade)
 
   @@index([quiz_id, order_index], map: "idx_quiz_questions_quiz")
-  @@map("quiz_questions")
-  @@schema("public")
+  @@map("quiz_questions")
 }
 
 model QuizAttempt {
@@ -731,8 +667,7 @@ model QuizAttempt {
 
   @@index([student_id, created_at(sort: Desc)], map: "idx_quiz_attempts_student")
   @@index([quiz_id], map: "idx_quiz_attempts_quiz")
-  @@map("quiz_attempts")
-  @@schema("public")
+  @@map("quiz_attempts")
 }
 
 model MatchingLog {
@@ -752,8 +687,7 @@ model MatchingLog {
 
   @@index([student_id, created_at(sort: Desc)], map: "idx_matching_logs_student")
   @@index([tutor_id], map: "idx_matching_logs_tutor")
-  @@map("matching_logs")
-  @@schema("public")
+  @@map("matching_logs")
 }
 
 model WhiteboardState {
@@ -769,8 +703,7 @@ model WhiteboardState {
   user    User         @relation(fields: [created_by], references: [user_id])
 
   @@index([session_id, timestamp], map: "idx_whiteboard_session")
-  @@map("whiteboard_states")
-  @@schema("public")
+  @@map("whiteboard_states")
 }
 
 model AdminLog {
@@ -788,8 +721,7 @@ model AdminLog {
 
   @@index([admin_id, created_at(sort: Desc)], map: "idx_admin_logs_admin")
   @@index([target_type, target_id], map: "idx_admin_logs_target")
-  @@map("admin_logs")
-  @@schema("public")
+  @@map("admin_logs")
 }
 
 model SystemConfig {
@@ -798,8 +730,7 @@ model SystemConfig {
   description  String?
   updated_at   DateTime @default(now()) @db.Timestamptz
 
-  @@map("system_configs")
-  @@schema("public")
+  @@map("system_configs")
 }
 
 model UserAddress {
@@ -816,6 +747,21 @@ model UserAddress {
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
   @@index([user_id], map: "idx_user_addresses_user")
-  @@map("user_addresses")
-  @@schema("public")
+  @@map("user_addresses")
+}
+
+model Article {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String
+  excerpt       String
+  content       Json
+  date          String
+  author        String
+  commentsCount Int      @default(0)
+  category      String
+  imageType     String
+  tags          Json
+  created_at    DateTime @default(now()) @db.Timestamptz
+
+  @@map("articles")
 }

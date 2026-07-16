@@ -2,11 +2,21 @@ import { Router } from 'express';
 import authRoutes from './auth.routes';
 import subjectRoutes from './subject.routes';
 import courseRoutes from './course.routes';
+import bookingRoutes from './booking.routes';
+import articleRoutes from './article.routes';
+import favoriteRoutes from './favorite.routes';
+import quizRoutes from './quiz.routes';
+import reviewRoutes from './review.routes';
 
 const rootRouter = Router();
 
 rootRouter.use('/auth', authRoutes);       
 rootRouter.use('/subjects', subjectRoutes);
 rootRouter.use('/courses', courseRoutes);
+rootRouter.use('/bookings', bookingRoutes);
+rootRouter.use('/blog', articleRoutes);
+rootRouter.use('/favorites', favoriteRoutes);
+rootRouter.use('/quizzes', quizRoutes);
+rootRouter.use('/reviews', reviewRoutes);
 
 export default rootRouter;
