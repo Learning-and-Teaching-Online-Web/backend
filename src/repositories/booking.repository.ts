@@ -51,6 +51,19 @@ export const bookingRepository = {
     return data;
   },
 
+  // Check if student already enrolled in a specific course
+  async findByStudentIdAndCourse(supabase: SupabaseClient, studentId: string, courseId: string) {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('booking_id')
+      .eq('student_id', studentId)
+      .eq('course_id', courseId)
+      .neq('status', 'cancelled');
+
+    if (error) throw error;
+    return data;
+  },
+
   // Mark schedule as booked
   async markScheduleBooked(supabase: SupabaseClient, scheduleId: string, isBooked: boolean) {
     const { data, error } = await supabase

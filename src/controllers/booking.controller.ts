@@ -16,8 +16,8 @@ export const bookingController = {
         return;
       }
 
-      if (!courseId || !scheduleId) {
-        res.status(400).json({ success: false, error: 'Thiếu thông tin khóa học hoặc lịch dạy' });
+      if (!courseId) {
+        res.status(400).json({ success: false, error: 'Thiếu thông tin khóa học' });
         return;
       }
 
