@@ -1,29 +1,24 @@
 import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
 import { tutorRepository } from '../repositories/tutor.repository';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { prisma } from '../config/prisma';
 
 export const tutorController = {
   // GET /tutors - Lấy tất cả giảng viên
   async getAll(req: Request, res: Response) {
     try {
-      const tutors = await tutorRepository.findAll(supabase);
+      const tutors = await tutorRepository.findAll();
 
       if (tutors && tutors.length > 0) {
         // Lấy tất cả khóa học của hệ thống
-        const { data: courses } = await supabase
-          .from('courses')
-          .select('course_id, tutor_id');
+        const courses = await prisma.course.findMany({
+          select: { course_id: true, tutor_id: true }
+        });
 
         // Lấy tất cả đăng ký học hợp lệ (không bị hủy)
-        const { data: bookings } = await supabase
-          .from('bookings')
-          .select('course_id, student_id')
-          .neq('status', 'cancelled');
+        const bookings = await prisma.booking.findMany({
+          where: { status: { not: 'cancelled' } },
+          select: { course_id: true, student_id: true }
+        });
 
         const courseMap = courses || [];
         const bookingMap = bookings || [];
@@ -55,31 +50,33 @@ export const tutorController = {
   async getById(req: Request, res: Response) {
     try {
       const tutorId = req.params.tutorId as string;
-      const tutor = await tutorRepository.findById(supabase, tutorId);
+      const tutor = await tutorRepository.findById(tutorId);
       if (!tutor) {
         return res.status(404).json({ success: false, error: 'Tutor not found' });
       }
 
       // Đếm khóa học của giảng viên này
-      const { data: courses } = await supabase
-        .from('courses')
-        .select('course_id')
-        .eq('tutor_id', tutorId);
+      const courses = await prisma.course.findMany({
+        where: { tutor_id: tutorId },
+        select: { course_id: true }
+      });
 
       const tutorCourses = courses || [];
-      tutor.total_courses = tutorCourses.length;
+      (tutor as any).total_courses = tutorCourses.length;
 
       if (tutorCourses.length > 0) {
         const courseIds = tutorCourses.map((c: any) => c.course_id);
-        const { data: bookings } = await supabase
-          .from('bookings')
-          .select('student_id')
-          .in('course_id', courseIds)
-          .neq('status', 'cancelled');
+        const bookings = await prisma.booking.findMany({
+          where: {
+            course_id: { in: courseIds },
+            status: { not: 'cancelled' }
+          },
+          select: { student_id: true }
+        });
 
-        tutor.total_students = new Set((bookings || []).map((b: any) => b.student_id)).size;
+        (tutor as any).total_students = new Set((bookings || []).map((b: any) => b.student_id)).size;
       } else {
-        tutor.total_students = 0;
+        (tutor as any).total_students = 0;
       }
 
       res.json({ success: true, data: tutor });

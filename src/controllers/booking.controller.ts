@@ -1,13 +1,11 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { bookingService } from '../services/booking.service';
-import { supabase as globalSupabase } from '../config/supabase';
 
 export const bookingController = {
   // Create a new booking
   async create(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const userId = req.user?.id;
       const { courseId, scheduleId, notes } = req.body;
 
@@ -21,7 +19,7 @@ export const bookingController = {
         return;
       }
 
-      const result = await bookingService.createBooking(client, userId, courseId, scheduleId, notes);
+      const result = await bookingService.createBooking(userId, courseId, scheduleId, notes);
       res.status(201).json({ success: true, message: 'Đăng ký khóa học thành công', data: result });
     } catch (error: any) {
       console.error('Error in createBooking controller:', error);
@@ -32,7 +30,6 @@ export const bookingController = {
   // List student bookings
   async listMyBookings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -40,7 +37,7 @@ export const bookingController = {
         return;
       }
 
-      const result = await bookingService.getMyBookings(client, userId);
+      const result = await bookingService.getMyBookings(userId);
       res.status(200).json({ success: true, data: result });
     } catch (error: any) {
       console.error('Error in listMyBookings controller:', error);

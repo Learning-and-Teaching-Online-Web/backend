@@ -1,12 +1,10 @@
-import { SupabaseClient } from '@supabase/supabase-js';
 import { courseRepository } from '../repositories/course.repository';
 import { tutorRepository } from '../repositories/tutor.repository';
-import { supabaseAdmin } from '../config/supabase';
 
 export const courseService = {
   // Create a new course
-  async createCourse(supabase: SupabaseClient, userId: string, courseData: any) {
-    const tutor = await tutorRepository.findByUserId(supabase, userId);
+  async createCourse(userId: string, courseData: any) {
+    const tutor = await tutorRepository.findByUserId(userId);
     if (!tutor) {
       throw new Error('Gia sư chưa thiết lập hồ sơ. Vui lòng tạo hồ sơ gia sư trước.');
     }
@@ -52,17 +50,17 @@ export const courseService = {
       tags: tags || []
     };
 
-    return await courseRepository.insert(supabase, payload);
+    return await courseRepository.insert(payload);
   },
 
   // Update a course details
-  async updateCourse(supabase: SupabaseClient, userId: string, courseId: string, courseData: any) {
-    const tutor = await tutorRepository.findByUserId(supabase, userId);
+  async updateCourse(userId: string, courseId: string, courseData: any) {
+    const tutor = await tutorRepository.findByUserId(userId);
     if (!tutor) {
       throw new Error('Hồ sơ gia sư không tồn tại');
     }
 
-    const course = await courseRepository.findById(supabase, courseId);
+    const course = await courseRepository.findById(courseId);
     if (!course) {
       throw new Error('Không tìm thấy khóa học');
     }
@@ -87,17 +85,17 @@ export const courseService = {
       }
     });
 
-    return await courseRepository.update(supabase, courseId, updatePayload);
+    return await courseRepository.update(courseId, updatePayload);
   },
 
   // Soft delete / archive a course
-  async deleteCourse(supabase: SupabaseClient, userId: string, courseId: string) {
-    const tutor = await tutorRepository.findByUserId(supabase, userId);
+  async deleteCourse(userId: string, courseId: string) {
+    const tutor = await tutorRepository.findByUserId(userId);
     if (!tutor) {
       throw new Error('Hồ sơ gia sư không tồn tại');
     }
 
-    const course = await courseRepository.findById(supabase, courseId);
+    const course = await courseRepository.findById(courseId);
     if (!course) {
       throw new Error('Không tìm thấy khóa học');
     }
@@ -106,17 +104,17 @@ export const courseService = {
       throw new Error('Bạn không có quyền xóa khóa học này');
     }
 
-    return await courseRepository.delete(supabase, courseId);
+    return await courseRepository.delete(courseId);
   },
 
   // Add a schedule slot to a course
-  async addSchedule(supabase: SupabaseClient, userId: string, courseId: string, scheduleData: any) {
-    const tutor = await tutorRepository.findByUserId(supabase, userId);
+  async addSchedule(userId: string, courseId: string, scheduleData: any) {
+    const tutor = await tutorRepository.findByUserId(userId);
     if (!tutor) {
       throw new Error('Hồ sơ gia sư không tồn tại');
     }
 
-    const course = await courseRepository.findById(supabase, courseId);
+    const course = await courseRepository.findById(courseId);
     if (!course) {
       throw new Error('Không tìm thấy khóa học');
     }
@@ -148,51 +146,27 @@ export const courseService = {
     }
 
     // Check overlap with existing schedules of this tutor
-    const overlaps = await courseRepository.findOverlappingSchedules(supabase, tutor.tutor_id, start_time, end_time);
+    const overlaps = await courseRepository.findOverlappingSchedules(tutor.tutor_id, start_time, end_time);
     if (overlaps.length > 0) {
       throw new Error('Thời gian này đã bị trùng lịch với lịch dạy khác của bạn');
     }
 
     const payload = {
       course_id: courseId,
-      start_time,
-      end_time,
+      start_time: new Date(start_time),
+      end_time: new Date(end_time),
       is_recurring: is_recurring || false,
       day_of_week,
-      recurrence_end,
+      recurrence_end: recurrence_end ? new Date(recurrence_end) : null,
       max_slot: max_slot || course.max_students || 1,
       is_booked: false
     };
 
-    return await courseRepository.addSchedule(supabase, payload);
-  },
-
-  // ─── Internal Helper: fetch tutor + user riêng (tránh phụ thuộc Supabase FK join) ───
-  async _fetchTutorWithUser(supabase: SupabaseClient, tutorId: string) {
-    try {
-      const { data: tutorData, error: tErr } = await supabaseAdmin
-        .from('tutor_profiles')
-        .select('*')
-        .eq('tutor_id', tutorId)
-        .single();
-
-      if (tErr) return null;
-      if (!tutorData) return null;
-
-      const { data: userData, error: uErr } = await supabaseAdmin
-        .from('users')
-        .select('full_name, avatar_url, email')
-        .eq('user_id', tutorData.user_id)
-        .single();
-
-      return { ...tutorData, user: userData || null };
-    } catch (err: any) {
-      return null;
-    }
+    return await courseRepository.addSchedule(payload);
   },
 
   // List all courses with filtering
-  async listCourses(supabase: SupabaseClient, query: any) {
+  async listCourses(query: any) {
     const filters = {
       subject: query.subject,
       level: query.level,
@@ -205,71 +179,16 @@ export const courseService = {
       limit: Number(query.limit) || 10
     };
 
-    const { data, count } = await courseRepository.findAll(supabase, filters);
-
-    // Gắn tutor vào từng course (batch, không cần join Supabase)
-    if (data && data.length > 0) {
-      // Lấy unique tutor_ids
-      const tutorIds = [...new Set(data.map((c: any) => c.tutor_id).filter(Boolean))] as string[];
-
-      // Fetch tất cả tutors cùng lúc
-      if (tutorIds.length > 0) {
-        const { data: tutors } = await supabaseAdmin
-          .from('tutor_profiles')
-          .select('*')
-          .in('tutor_id', tutorIds);
-
-        if (tutors && tutors.length > 0) {
-          // Fetch users cho các tutors
-          const userIds = [...new Set(tutors.map((t: any) => t.user_id).filter(Boolean))] as string[];
-          const { data: users } = await supabaseAdmin
-            .from('users')
-            .select('user_id, full_name, avatar_url, email')
-            .in('user_id', userIds);
-
-          // Build map để tra cứu nhanh
-          const userMap = new Map((users || []).map((u: any) => [u.user_id, u]));
-          const tutorMap = new Map(tutors.map((t: any) => [
-            t.tutor_id,
-            { ...t, user: userMap.get(t.user_id) || null }
-          ]));
-
-          // Gắn tutor vào course (chỉ khi tutor từ Supabase join là null)
-          data.forEach((course: any) => {
-            if (!course.tutor && course.tutor_id) {
-              course.tutor = tutorMap.get(course.tutor_id) || null;
-            } else if (course.tutor && !course.tutor.user && course.tutor.user_id) {
-              course.tutor.user = userMap.get(course.tutor.user_id) || null;
-            }
-          });
-        }
-      }
-    }
+    const { data, count } = await courseRepository.findAll(filters);
 
     return { data, total: count, page: filters.page, limit: filters.limit };
   },
 
   // Get detailed course by id
-  async getCourseDetail(supabase: SupabaseClient, courseId: string) {
+  async getCourseDetail(courseId: string) {
     try {
-      const course = await courseRepository.findById(supabase, courseId);
+      const course = await courseRepository.findById(courseId);
       if (!course) return null;
-
-      // Gắn tutor nếu Supabase join trả về null
-      if (!course.tutor && course.tutor_id) {
-        course.tutor = await courseService._fetchTutorWithUser(supabase, course.tutor_id);
-      }
-
-      // Nếu tutor có nhưng user null, fetch user riêng
-      if (course.tutor && !course.tutor.user && course.tutor.user_id) {
-        const { data: userData } = await supabaseAdmin
-          .from('users')
-          .select('full_name, avatar_url, email')
-          .eq('user_id', course.tutor.user_id)
-          .single();
-        course.tutor.user = userData || null;
-      }
-
       return course;
     } catch (err: any) {
       throw err;
