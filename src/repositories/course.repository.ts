@@ -58,6 +58,7 @@ export const courseRepository = {
         orderBy: { created_at: 'desc' },
         skip,
         take: limit
+
       }),
       prisma.course.count({ where: whereClause })
     ]);

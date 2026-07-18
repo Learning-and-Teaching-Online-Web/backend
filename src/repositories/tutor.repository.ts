@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 
 export const tutorRepository = {
-<<<<<<< HEAD
+
   async findByUserId(userId: string) {
     const data = await prisma.tutorProfile.findUnique({
       where: { user_id: userId },
@@ -36,35 +36,12 @@ export const tutorRepository = {
     return data || [];
   },
 
-  async findById(tutorId: string) {
-    const data = await prisma.tutorProfile.findUnique({
-      where: { tutor_id: tutorId },
-      include: {
-        user: {
-          select: {
-            full_name: true,
-            avatar_url: true,
-            email: true
-          }
-        }
-      }
-    });
-
-    return data;
-=======
-  // Find tutor profile by user ID (Supabase UID)
-  async findByUserId(supabase: any, userId: string) {
-    return await prisma.tutorProfile.findUnique({
-      where: { user_id: userId }
-    });
-  },
-
   // Calculate statistics for the Tutor Dashboard
   async getStats(tutorId: string) {
     const coursesCount = await prisma.course.count({
-      where: { 
-        tutor_id: tutorId, 
-        NOT: { status: 'archived' } 
+      where: {
+        tutor_id: tutorId,
+        NOT: { status: 'archived' }
       }
     });
 
@@ -174,7 +151,7 @@ export const tutorRepository = {
 
       if (tutor) {
         const netAmount = Number(booking.total_amount) * 0.9;
-        
+
         // Find or create wallet
         await prisma.wallet.upsert({
           where: { user_id: tutor.user_id },
@@ -189,8 +166,7 @@ export const tutorRepository = {
             user_id: tutor.user_id,
             amount: netAmount,
             status: 'success',
-            payment_method: 'wallet',
-            description: `Học phí nhận từ học sinh`
+            payment_method: 'wallet'
           }
         });
       }
@@ -308,6 +284,5 @@ export const tutorRepository = {
     });
 
     return payout;
->>>>>>> 11921c9 (feat: implement tutor dashboard API endpoints for stats, bookings, reviews, and wallet management)
   }
 };
