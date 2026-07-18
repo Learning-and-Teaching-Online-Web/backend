@@ -11,4 +11,12 @@ export const createUserClient = (jwt: string) => {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { autoRefreshToken: false, persistSession: false }
   });
-};
+};
+
+export const supabaseAdmin = createClient(
+  env.supabaseUrl,
+  env.supabaseServiceKey,
+  {
+    auth: { autoRefreshToken: false, persistSession: false }
+  }
+);

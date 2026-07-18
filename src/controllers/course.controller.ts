@@ -1,20 +1,18 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { courseService } from '../services/course.service';
-import { supabase as globalSupabase } from '../config/supabase';
 
 export const courseController = {
   // Create a new course
   async create(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const userId = req.user?.id;
       if (!userId) {
         res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
         return;
       }
 
-      const result = await courseService.createCourse(client, userId, req.body);
+      const result = await courseService.createCourse(userId, req.body);
       res.status(201).json({ success: true, message: 'Tạo khóa học thành công', data: result });
     } catch (error: any) {
       console.error('Error in createCourse controller:', error);
@@ -25,7 +23,6 @@ export const courseController = {
   // Update a course
   async update(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const userId = req.user?.id;
       const courseId = req.params.id as string;
 
@@ -34,7 +31,7 @@ export const courseController = {
         return;
       }
 
-      const result = await courseService.updateCourse(client, userId, courseId, req.body);
+      const result = await courseService.updateCourse(userId, courseId, req.body);
       res.status(200).json({ success: true, message: 'Cập nhật khóa học thành công', data: result });
     } catch (error: any) {
       console.error('Error in updateCourse controller:', error);
@@ -45,7 +42,6 @@ export const courseController = {
   // Delete/Archive a course
   async delete(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const userId = req.user?.id;
       const courseId = req.params.id as string;
 
@@ -54,7 +50,7 @@ export const courseController = {
         return;
       }
 
-      const result = await courseService.deleteCourse(client, userId, courseId);
+      const result = await courseService.deleteCourse(userId, courseId);
       res.status(200).json({ success: true, message: 'Xóa (Lưu trữ) khóa học thành công', data: result });
     } catch (error: any) {
       console.error('Error in deleteCourse controller:', error);
@@ -65,7 +61,6 @@ export const courseController = {
   // Add teaching schedule slot to a course
   async addSchedule(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const userId = req.user?.id;
       const courseId = req.params.id as string;
 
@@ -74,7 +69,7 @@ export const courseController = {
         return;
       }
 
-      const result = await courseService.addSchedule(client, userId, courseId, req.body);
+      const result = await courseService.addSchedule(userId, courseId, req.body);
       res.status(201).json({ success: true, message: 'Thêm lịch dạy thành công', data: result });
     } catch (error: any) {
       console.error('Error in addSchedule controller:', error);
@@ -85,8 +80,7 @@ export const courseController = {
   // Get list of courses with filtering (public view)
   async list(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
-      const result = await courseService.listCourses(client, req.query);
+      const result = await courseService.listCourses(req.query);
       res.status(200).json({ success: true, data: result.data, total: result.total, page: result.page, limit: result.limit });
     } catch (error: any) {
       console.error('Error in listCourses controller:', error);
@@ -116,9 +110,8 @@ export const courseController = {
   // Get course detailed info
   async detail(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const client = req.supabase || globalSupabase;
       const courseId = req.params.id as string;
-      const result = await courseService.getCourseDetail(client, courseId);
+      const result = await courseService.getCourseDetail(courseId);
 
       if (!result) {
         res.status(404).json({ success: false, error: 'Không tìm thấy khóa học này' });

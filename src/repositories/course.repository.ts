@@ -1,9 +1,8 @@
-import { SupabaseClient } from '@supabase/supabase-js';
 import { prisma } from '../config/prisma';
 
 export const courseRepository = {
   // Find course details including tutor, schedules, documents, and quizzes
-  async findById(supabase: SupabaseClient, courseId: string) {
+  async findById(courseId: string) {
     const data = await prisma.course.findUnique({
       where: { course_id: courseId },
       include: {
@@ -16,7 +15,7 @@ export const courseRepository = {
         },
         schedules: true,
         documents: true,
-        quizzes: true,
+        quizzes: true
       }
     });
 
@@ -24,38 +23,28 @@ export const courseRepository = {
   },
 
   // Find all courses with pagination and filter support
-  async findAll(supabase: SupabaseClient, filters: any) {
-    const where: any = {};
+  async findAll(filters: any) {
+    const page = parseInt(filters.page) || 1;
+    const limit = parseInt(filters.limit) || 10;
+    const skip = (page - 1) * limit;
+    const whereClause: any = {};
 
-    if (filters.subject) where.subject = filters.subject;
-    if (filters.level) where.level = filters.level;
-
-    if (filters.min_price || filters.max_price) {
-      where.price = {};
-      if (filters.min_price) where.price.gte = filters.min_price;
-      if (filters.max_price) where.price.lte = filters.max_price;
-    }
-
-    if (filters.tutor_id) where.tutor_id = filters.tutor_id;
-    if (filters.status) where.status = filters.status;
-
+    if (filters.subject) whereClause.subject = filters.subject;
+    if (filters.level) whereClause.level = filters.level;
+    if (filters.min_price) whereClause.price = { ...whereClause.price, gte: parseFloat(filters.min_price) };
+    if (filters.max_price) whereClause.price = { ...whereClause.price, lte: parseFloat(filters.max_price) };
+    if (filters.tutor_id) whereClause.tutor_id = filters.tutor_id;
+    if (filters.status) whereClause.status = filters.status;
     if (filters.search) {
-      where.OR = [
+      whereClause.OR = [
         { title: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } }
       ];
     }
 
-    const page = parseInt(filters.page) || 1;
-    const limit = parseInt(filters.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    const [data, count] = await Promise.all([
+    const [data, count] = await prisma.$transaction([
       prisma.course.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: 'desc' },
+        where: whereClause,
         include: {
           tutor: {
             include: {
@@ -64,76 +53,75 @@ export const courseRepository = {
               }
             }
           }
-        }
+        },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: limit
       }),
-      prisma.course.count({ where })
+      prisma.course.count({ where: whereClause })
     ]);
 
-    const formattedData = data.map((course: any) => ({
-      ...course,
-      price: Number(course.price)
-    }));
-
-    return { data: formattedData, count };
+    return { data, count };
   },
 
   // Insert a new course
-  async insert(supabase: SupabaseClient, courseData: any) {
+  async insert(courseData: any) {
     const data = await prisma.course.create({
       data: courseData
     });
+
     return data;
   },
 
   // Update an existing course
-  async update(supabase: SupabaseClient, courseId: string, courseData: any) {
+  async update(courseId: string, courseData: any) {
     const data = await prisma.course.update({
       where: { course_id: courseId },
       data: courseData
     });
+
     return data;
   },
 
   // Delete a course (e.g. by setting status to archived or deleting it)
-  async delete(supabase: SupabaseClient, courseId: string) {
+  async delete(courseId: string) {
+    // Soft delete: update status to 'archived'
     const data = await prisma.course.update({
       where: { course_id: courseId },
       data: { status: 'archived' }
     });
+
     return data;
   },
 
   // Add schedule to a course
-  async addSchedule(supabase: SupabaseClient, scheduleData: any) {
+
+  async addSchedule(scheduleData: any) {
     const data = await prisma.courseSchedule.create({
       data: scheduleData
     });
+
     return data;
   },
 
   // Find existing schedules to prevent overlap
-  async findOverlappingSchedules(supabase: SupabaseClient, tutorId: string, startTime: string, endTime: string) {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
 
-    const data = await prisma.courseSchedule.findMany({
+  async findOverlappingSchedules(tutorId: string, startTime: string, endTime: string) {
+    const overlaps = await prisma.courseSchedule.findMany({
       where: {
-        course: {
-          tutor_id: tutorId
-        },
+        course: { tutor_id: tutorId },
         OR: [
-          { start_time: { lte: start }, end_time: { gt: start } },
-          { start_time: { lt: end }, end_time: { gte: end } },
-          { start_time: { gte: start }, end_time: { lte: end } }
+          { start_time: { lte: new Date(startTime) }, end_time: { gt: new Date(startTime) } },
+          { start_time: { lt: new Date(endTime) }, end_time: { gte: new Date(endTime) } },
+          { start_time: { gte: new Date(startTime) }, end_time: { lte: new Date(endTime) } }
         ]
       },
       include: {
-        course: {
-          select: { tutor_id: true }
-        }
+        course: { select: { tutor_id: true } }
       }
     });
 
-    return data;
+    return overlaps;
   }
 };
+

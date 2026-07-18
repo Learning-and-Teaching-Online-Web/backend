@@ -1,18 +1,18 @@
-import { supabase } from '../config/supabase';
+import { prisma } from '../config/prisma';
 
 export const userRepository = {
 
   // Tìm kiếm thông tin profile của user theo ID
   async findById(userId: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const user = await prisma.user.findUnique({
+      where: { user_id: userId }
+    });
 
-    if (error) throw error;
-    
-    return data;
+    if (!user) {
+      throw new Error(`User with id ${userId} not found`);
+    }
+
+    return user;
   }
 
 };

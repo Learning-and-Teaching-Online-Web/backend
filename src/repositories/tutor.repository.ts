@@ -1,16 +1,54 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import { prisma } from '../config/prisma';
 
 export const tutorRepository = {
-  async findByUserId(supabase: SupabaseClient, userId: string) {
-    const { data, error } = await supabase
-      .from('tutor_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+  async findByUserId(userId: string) {
+    const data = await prisma.tutorProfile.findUnique({
+      where: { user_id: userId },
+      include: {
+        user: {
+          select: {
+            full_name: true,
+            avatar_url: true,
+            email: true
+          }
+        }
+      }
+    });
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is the PostgREST code for "No rows found"
-      throw error;
-    }
+    return data;
+  },
+
+  async findAll() {
+    const data = await prisma.tutorProfile.findMany({
+      orderBy: { created_at: 'desc' },
+      include: {
+        user: {
+          select: {
+            full_name: true,
+            avatar_url: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    return data || [];
+  },
+
+  async findById(tutorId: string) {
+    const data = await prisma.tutorProfile.findUnique({
+      where: { tutor_id: tutorId },
+      include: {
+        user: {
+          select: {
+            full_name: true,
+            avatar_url: true,
+            email: true
+          }
+        }
+      }
+    });
+
     return data;
   }
 };
