@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { tutorRepository } from '../repositories/tutor.repository';
 import { prisma } from '../config/prisma';
+import { tutorService } from '../services/tutor.service';
+import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export const tutorController = {
   // GET /tutors - Lấy tất cả giảng viên
@@ -84,5 +86,119 @@ export const tutorController = {
       console.error('Error fetching tutor:', error);
       res.status(500).json({ success: false, error: error.message || 'Internal server error' });
     }
+  },
+
+  // Get tutor dashboard stats
+  async getStats(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const data = await tutorService.getStats(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error in getStats controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Get tutor bookings
+  async getBookings(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const data = await tutorService.getBookings(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error in getBookings controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Update a booking request status (confirm or cancel)
+  async updateBookingStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const bookingId = req.params.id as string;
+      const { status } = req.body; // 'confirmed' | 'cancelled'
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      if (!['confirmed', 'cancelled'].includes(status)) {
+        res.status(400).json({ success: false, error: 'Trạng thái cập nhật không hợp lệ' });
+        return;
+      }
+
+      const data = await tutorService.updateBookingStatus(userId, bookingId, status);
+      res.status(200).json({ success: true, message: 'Cập nhật trạng thái đặt buổi học thành công', data });
+    } catch (error: any) {
+      console.error('Error in updateBookingStatus controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Get tutor reviews
+  async getReviews(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const data = await tutorService.getReviews(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error in getReviews controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Get tutor wallet and transaction logs
+  async getWallet(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const data = await tutorService.getWallet(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error in getWallet controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Submit withdrawal / payout request
+  async withdrawFunds(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { amount, bankName, bankAccount } = req.body;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      if (!amount || amount <= 0) {
+        res.status(400).json({ success: false, error: 'Số tiền rút phải lớn hơn 0' });
+        return;
+      }
+
+      const data = await tutorService.withdrawFunds(userId, Number(amount), bankName, bankAccount);
+      res.status(201).json({ success: true, message: 'Gửi yêu cầu rút tiền thành công', data });
+    } catch (error: any) {
+      console.error('Error in withdrawFunds controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
   }
 };
+

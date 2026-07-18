@@ -11,7 +11,7 @@ import tutorRoutes from './tutor.routes';
 
 const rootRouter = Router();
 
-rootRouter.use('/auth', authRoutes);       
+rootRouter.use('/auth', authRoutes);
 rootRouter.use('/subjects', subjectRoutes);
 rootRouter.use('/courses', courseRoutes);
 rootRouter.use('/bookings', bookingRoutes);
