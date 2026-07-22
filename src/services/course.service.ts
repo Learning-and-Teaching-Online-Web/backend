@@ -175,6 +175,7 @@ export const courseService = {
       max_price: query.max_price ? Number(query.max_price) : undefined,
       tutor_id: query.tutor_id,
       status: 'published', // Force published for public API
+      is_public_api: true, // Filter only approved tutors and active users
       search: query.search,
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 10

@@ -35,6 +35,14 @@ export const courseRepository = {
     if (filters.max_price) whereClause.price = { ...whereClause.price, lte: parseFloat(filters.max_price) };
     if (filters.tutor_id) whereClause.tutor_id = filters.tutor_id;
     if (filters.status) whereClause.status = filters.status;
+    if (filters.is_public_api) {
+      whereClause.tutor = {
+        verified_status: 'approved',
+        user: {
+          status: 'active'
+        }
+      };
+    }
     if (filters.search) {
       whereClause.OR = [
         { title: { contains: filters.search, mode: 'insensitive' } },

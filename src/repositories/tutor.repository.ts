@@ -38,7 +38,13 @@ export const tutorRepository = {
 
   async findAll() {
     const data = await prisma.tutorProfile.findMany({
-      orderBy: { created_at: 'desc' },
+      where: {
+        verified_status: 'approved',
+        user: {
+          status: 'active'
+        }
+      },
+      orderBy: { rating: 'desc' },
       include: {
         user: {
           select: {
