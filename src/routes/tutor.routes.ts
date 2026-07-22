@@ -4,16 +4,12 @@ import { verifyAuth, requireRole } from '../middlewares/auth.middleware';
 
 const tutorRoutes = Router();
 
-// Apply auth protection & role check for all routes in this namespace
-tutorRoutes.use(verifyAuth);
-tutorRoutes.use(requireRole('tutor'));
-
-tutorRoutes.get('/stats', tutorController.getStats);
-tutorRoutes.get('/bookings', tutorController.getBookings);
-tutorRoutes.patch('/bookings/:id', tutorController.updateBookingStatus);
-tutorRoutes.get('/reviews', tutorController.getReviews);
-tutorRoutes.get('/wallet', tutorController.getWallet);
-tutorRoutes.post('/wallet/withdraw', tutorController.withdrawFunds);
+tutorRoutes.get('/stats', verifyAuth, requireRole('tutor'), tutorController.getStats);
+tutorRoutes.get('/bookings', verifyAuth, requireRole('tutor'), tutorController.getBookings);
+tutorRoutes.patch('/bookings/:id', verifyAuth, requireRole('tutor'), tutorController.updateBookingStatus);
+tutorRoutes.get('/reviews', verifyAuth, requireRole('tutor'), tutorController.getReviews);
+tutorRoutes.get('/wallet', verifyAuth, requireRole('tutor'), tutorController.getWallet);
+tutorRoutes.post('/wallet/withdraw', verifyAuth, requireRole('tutor'), tutorController.withdrawFunds);
 tutorRoutes.get('/', tutorController.getAll);
 tutorRoutes.get('/:tutorId', tutorController.getById);
 
