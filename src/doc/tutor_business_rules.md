@@ -1,6 +1,6 @@
 # Quy Trắc & Nghiệp Vụ Quản Lý Giảng Viên (Tutor Business Specification)
 
-Tài liệu này quy định chi tiết luồng nghiệp vụ, phân quyền và các kịch bản xử lý tài khoản Giảng viên (Tutor / Instructor) trên hệ thống **NovaLearn**.
+Tài liệu này quy định chi tiết toàn bộ luồng nghiệp vụ, phân quyền, tài chính và các kịch bản xử lý tài khoản Giảng viên (Tutor / Instructor) trên hệ thống **NovaLearn**.
 
 ---
 
@@ -36,7 +36,7 @@ Hồ sơ giảng viên (`tutor_profiles`) trải qua 3 trạng thái chính:
 - **Điều kiện**: Admin từ chối hồ sơ do bằng cấp không hợp lệ, hoặc khóa tài khoản do giảng viên vi phạm chính sách nền tảng.
 - **Hệ quả nghiệp vụ**:
   - ❌ **Tự động ẩn** profile khỏi trang tìm kiếm công khai `/instructors`.
-  - ❌ **Khóa học bị ngừng nhận sinh viên mới**: Chuyển tất cả khóa học của giảng viên về trạng thái ẩn (`hidden`).
+  - ❌ **Khóa học bị ngừng nhận sinh viên mới**: Tự động ẩn toàn bộ khóa học khỏi trang public (`/courses`).
   - 🔒 **Đóng băng ví & rút tiền**: Tạm dừng tính năng rút tiền thu nhập để chờ xử lý khiếu nại.
 
 ---
@@ -59,3 +59,49 @@ Khi một Giảng viên đã có học viên đăng ký học trước đó như
 2. Trạng thái chứng chỉ khởi tạo là `pending`.
 3. Admin nhấp **Xem chứng chỉ** trên Admin Panel -> Kiểm tra tính hợp lệ -> Nhập **Admin Note** (ví dụ: *"Bằng đại học Bách Khoa hợp lệ"*) -> Bấm **Duyệt (Approve)** hoặc **Từ chối (Reject)**.
 4. Mỗi bằng cấp được duyệt sẽ giúp tăng điểm uy tín và huy hiệu xác minh trên trang cá nhân của giảng viên.
+
+---
+
+## 4. Quản Lý Khóa Học & Tránh Trùng Lịch Dạy (Courses & Schedule Validation)
+
+- **Cấu trúc khóa học**: Khóa học bao gồm thông tin học phí (`price`), thời lượng ca học (`duration_minutes`), số học viên tối đa (`max_students`), và số buổi học (`total_sessions`).
+- **Tạo ca học (`CourseSchedule`)**: Giảng viên thiết lập các khung giờ dạy cố định hoặc định kỳ (`day_of_week`, `start_time`, `end_time`).
+- **Thuật toán chặn trùng lịch (Schedule Overlap Guard)**: Hệ thống tự động kiểm tra thời gian thực. Giảng viên **không thể tạo 2 ca học bị đè hoặc trùng thời gian** với nhau.
+
+---
+
+## 5. Quy Trình Nhận Đặt Lớp & Điểm Danh (Booking & Attendance Workflow)
+
+1. **Đặt lớp (`Booking`)**: Học viên chọn khóa học và ca học ➔ Thanh toán qua cổng ZaloPay.
+2. **Khóa khung giờ**: Khi đơn hàng được xác nhận (`confirmed`), ca học `CourseSchedule` tự động đổi `is_booked = true`.
+3. **Tạo lớp học ảo (`ClassSession`)**: Hệ thống tự động khởi tạo phòng học, tích hợp phòng chat (`ChatRoom`) và bảng trắng tương tác (`WhiteboardState`).
+4. **Điểm danh (`Attendance`)**: Ghi nhận trạng thái có mặt (`present`), vắng mặt (`absent`), muộn (`late`) của học viên trong buổi học.
+
+---
+
+## 6. Chính Sách Ví Thu Nhập & Phí Nền Tảng (Tutor Wallet & Platform Fee)
+
+- **Phí hoa hồng nền tảng (Platform Fee)**: Hệ thống tự động chiết khấu **10%** trên mỗi đơn đặt lớp thành công. Giảng viên thực nhận **90%** học phí.
+- **Tự động cộng Ví (`Wallet`)**: Số tiền thực nhận được cộng vào Ví số dư tài khoản của Giảng viên ngay khi đơn hàng hoàn tất.
+- **Yêu cầu Rút tiền (`Payout`)**: Giảng viên gửi yêu cầu rút tiền về ngân hàng cá nhân (`bank_name`, `bank_account`, `amount`). Số tiền rút sẽ tạm trừ khỏi Ví.
+- **Xử lý yêu cầu Rút tiền**:
+  - Admin bấm **Duyệt chuyển khoản** ➔ Trạng thái `Payout` chuyển thành `completed`.
+  - Admin bấm **Từ chối / Thất bại** ➔ Số tiền tự động **hoàn trả 100% vào Ví** của Giảng viên.
+
+---
+
+## 7. Đánh Giá Uy Tín & Thuật Toán Xếp Hạng (Reviews & Rating System)
+
+- Chỉ Học viên đã tham gia lớp học mới được gửi Đánh giá (`Review`) kèm chấm điểm (1 - 5 sao).
+- Tiêu chí đánh giá gồm: Chuyên môn, Thái độ phục vụ (`professionalism`), Giao tiếp (`communication`), và Đúng giờ (`punctuality`).
+- Điểm trung bình `rating` của Giảng viên tự động cập nhật trong `tutor_profiles`.
+- Top Giảng viên có Rating cao nhất sẽ được ưu tiên hiển thị ở mục **Gia sư tiêu biểu** trên `AdminDashboard` và trang chủ người dùng.
+
+---
+
+## 8. Giao Diện Quản Trị Admin Panel (Admin Management Hub)
+
+- **Tách biệt Menu**: Phân chia rõ ràng 2 module **"Học viên"** (`/admin/students`) và **"Giảng viên"** (`/admin/tutors`).
+- **Bộ lọc mặc định**: Tab Giảng viên mặc định hiển thị *Tất cả trạng thái*, kết hợp **Badge đếm số lượng Chờ duyệt (`⏳ Chờ duyệt: X`)** màu vàng nổi bật ở góc phải thanh Filter.
+- **Lọc 1 chạm**: Nhấp trực tiếp vào Badge `Chờ duyệt` ở góc phải để lọc nhanh danh sách hồ sơ gia sư cần duyệt.
+- **Cảnh báo Khóa học**: Bảng kiểm duyệt khóa học (`/admin/courses`) hiển thị badge `GS Chờ duyệt` đối với các khóa học thuộc gia sư chưa được phê duyệt.
