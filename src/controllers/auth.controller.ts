@@ -17,6 +17,7 @@ export const authController = {
       const result = await authService.signIn(req.body);
       res.status(200).json({ success: true, message: 'Đăng nhập thành công', data: result });
     } catch (error: any) {
+      console.error('Error in signIn:', error);
       res.status(400).json({ success: false, error: error.message || error });
     }
   },

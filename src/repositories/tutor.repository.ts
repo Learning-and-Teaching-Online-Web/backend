@@ -19,9 +19,32 @@ export const tutorRepository = {
     return data;
   },
 
+  async findById(tutorId: string) {
+    const data = await prisma.tutorProfile.findUnique({
+      where: { tutor_id: tutorId },
+      include: {
+        user: {
+          select: {
+            full_name: true,
+            avatar_url: true,
+            email: true
+          }
+        }
+      }
+    });
+
+    return data;
+  },
+
   async findAll() {
     const data = await prisma.tutorProfile.findMany({
-      orderBy: { created_at: 'desc' },
+      where: {
+        verified_status: 'approved',
+        user: {
+          status: 'active'
+        }
+      },
+      orderBy: { rating: 'desc' },
       include: {
         user: {
           select: {

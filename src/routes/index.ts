@@ -8,6 +8,7 @@ import favoriteRoutes from './favorite.routes';
 import quizRoutes from './quiz.routes';
 import reviewRoutes from './review.routes';
 import tutorRoutes from './tutor.routes';
+import adminRoutes from './admin.routes';
 
 const rootRouter = Router();
 
@@ -20,5 +21,6 @@ rootRouter.use('/favorites', favoriteRoutes);
 rootRouter.use('/quizzes', quizRoutes);
 rootRouter.use('/reviews', reviewRoutes);
 rootRouter.use('/tutors', tutorRoutes);
+rootRouter.use('/admin', adminRoutes);
 
 export default rootRouter;
