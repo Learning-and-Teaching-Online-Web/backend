@@ -44,7 +44,11 @@ export const articleController = {
         year: 'numeric'
       });
 
-      const authorName = inputAuthor || req.user?.user_metadata?.full_name || req.user?.email || 'Admin';
+      const userRole = req.user?.user_metadata?.role || req.user?.role;
+      let authorName = req.user?.user_metadata?.full_name || req.user?.email || 'Gia sư';
+      if (userRole === 'admin' && inputAuthor) {
+        authorName = inputAuthor;
+      }
 
       const newArticle = await articleRepository.create({
         title,
@@ -75,6 +79,19 @@ export const articleController = {
         return;
       }
 
+      // Ownership check for non-admin users
+      const userRole = req.user?.user_metadata?.role || req.user?.role;
+      if (userRole !== 'admin') {
+        const userFullName = (req.user?.user_metadata?.full_name || '').toLowerCase().trim();
+        const userEmail = (req.user?.email || '').toLowerCase().trim();
+        const articleAuthor = existing.author.toLowerCase().trim();
+
+        if (articleAuthor !== userFullName && articleAuthor !== userEmail) {
+          res.status(403).json({ success: false, error: 'Bạn chỉ có quyền chỉnh sửa bài viết của chính mình' });
+          return;
+        }
+      }
+
       const updatePayload: any = {};
       if (title !== undefined) updatePayload.title = title;
       if (excerpt !== undefined) updatePayload.excerpt = excerpt;
@@ -82,7 +99,7 @@ export const articleController = {
       if (category !== undefined) updatePayload.category = category;
       if (imageType !== undefined) updatePayload.imageType = imageType;
       if (tags !== undefined) updatePayload.tags = Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : []);
-      if (author !== undefined) updatePayload.author = author;
+      if (author !== undefined && userRole === 'admin') updatePayload.author = author;
 
       const updatedArticle = await articleRepository.update(id as string, updatePayload);
       res.status(200).json({ success: true, message: 'Cập nhật bài viết thành công', data: updatedArticle });
@@ -100,6 +117,19 @@ export const articleController = {
       if (!existing) {
         res.status(404).json({ success: false, error: 'Không tìm thấy bài viết để xóa' });
         return;
+      }
+
+      // Ownership check for non-admin users
+      const userRole = req.user?.user_metadata?.role || req.user?.role;
+      if (userRole !== 'admin') {
+        const userFullName = (req.user?.user_metadata?.full_name || '').toLowerCase().trim();
+        const userEmail = (req.user?.email || '').toLowerCase().trim();
+        const articleAuthor = existing.author.toLowerCase().trim();
+
+        if (articleAuthor !== userFullName && articleAuthor !== userEmail) {
+          res.status(403).json({ success: false, error: 'Bạn chỉ có quyền xóa bài viết của chính mình' });
+          return;
+        }
       }
 
       await articleRepository.delete(id as string);
