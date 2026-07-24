@@ -1,9 +1,19 @@
 import { bookingRepository } from '../repositories/booking.repository';
 import { courseRepository } from '../repositories/course.repository';
+import { userRepository } from '../repositories/user.repository';
 
 export const bookingService = {
   // Create a new booking
   async createBooking(userId: string, courseId: string, scheduleId?: string, notes?: string) {
+    // 0. Check user role permissions
+    const user = await userRepository.findById(userId);
+    if (user.role === 'admin') {
+      throw new Error('Tài khoản Quản trị viên (Admin) không thể đăng ký khóa học');
+    }
+    if (user.role === 'tutor') {
+      throw new Error('Tài khoản Giảng viên không thể đăng ký khóa học. Vui lòng sử dụng tài khoản Học viên');
+    }
+
     // 1. Get or create student profile
     let student = await bookingRepository.findStudentProfileByUserId(userId);
     if (!student) {
@@ -80,17 +90,15 @@ export const bookingService = {
     // 6. Insert booking
     let booking;
     try {
-      console.log("Inserting booking payload:", bookingPayload);
       booking = await bookingRepository.insert(bookingPayload);
     } catch (insertError: any) {
-      console.error("Failed to insert booking. Payload was:", bookingPayload, "Error:", insertError);
+      console.error("Failed to insert booking:", insertError);
       throw new Error(`Lỗi khi tạo đăng ký: ${insertError.message || insertError}`);
     }
 
     // 7. Mark schedule as booked
     if (finalScheduleId) {
       try {
-        console.log("Marking schedule as booked. Schedule ID:", finalScheduleId);
         await bookingRepository.markScheduleBooked(finalScheduleId, true);
       } catch (schedError: any) {
         console.error("Warning: Failed to mark schedule as booked:", schedError);
@@ -111,4 +119,3 @@ export const bookingService = {
     return await bookingRepository.findByStudentId(student.student_id);
   }
 };
-

@@ -13,6 +13,16 @@ export const userRepository = {
     }
 
     return user;
+  },
+
+  // Cập nhật thông tin user theo ID
+  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; metadata?: any }) {
+    const user = await prisma.user.update({
+      where: { user_id: userId },
+      data
+    });
+
+    return user;
   }
 
 };
