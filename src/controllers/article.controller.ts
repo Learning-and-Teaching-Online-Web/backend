@@ -54,7 +54,7 @@ export const articleController = {
         title,
         excerpt,
         content: Array.isArray(content) ? content : [content],
-        date: dateStr,
+        published_at: new Date(),
         author: authorName,
         category,
         imageType: imageType || 'globe',

@@ -1,5 +1,5 @@
 import * as ExcelJS from "exceljs";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as path from "path";
@@ -50,6 +50,7 @@ const GROUP_COLORS: Record<string, string> = {
 
   quizzes: "F57F17",
   quiz_questions: "F57F17",
+  quiz_options: "F57F17",
   quiz_attempts: "F57F17",
 
   matching_logs: "880E4F",
@@ -60,6 +61,17 @@ const GROUP_COLORS: Record<string, string> = {
   articles: "1B5E20",
   article_comments: "1B5E20",
 };
+
+// ─── Helper: lấy danh sách thuộc tính (cột) từ Prisma DMMF schema ─────────────────
+function getTableHeaders(tableName: string): string[] {
+  const model = Prisma.dmmf.datamodel.models.find(
+    (m) => m.dbName === tableName || m.name.toLowerCase() === tableName.replace(/_/g, "")
+  );
+  if (!model) return [];
+  return model.fields
+    .filter((f) => (f.kind === "scalar" || f.kind === "enum") && f.name !== "embedding")
+    .map((f) => f.name);
+}
 
 // ─── Helper: flatten JSON/object thành string ────────────────────────────────
 function flattenValue(val: unknown): string | number | boolean | null {
@@ -125,44 +137,44 @@ async function writeTableToSheet(
   };
   titleRow.height = 32;
 
+  // Lấy headers từ data hoặc từ Prisma DMMF schema nếu data rỗng
+  const headers = data.length > 0 ? Object.keys(data[0]) : getTableHeaders(tableName);
+
+  if (headers.length > 0) {
+    styleHeaderRow(sheet, headers, color);
+    autofitColumns(sheet, headers);
+  }
+
   if (data.length === 0) {
-    sheet.addRow(["(Bảng này chưa có dữ liệu)"]);
-    console.log(`  ⚠️  ${sheetName}: rỗng`);
-    return;
+    const emptyNotice = sheet.addRow(["", "(Bảng này chưa có dữ liệu)"]);
+    emptyNotice.font = { italic: true, color: { argb: "FF888888" } };
+    console.log(`  ⚠️  ${sheetName}: rỗng (đã xuất tiêu đề ${headers.length} thuộc tính)`);
+  } else {
+    // Ghi từng dòng dữ liệu
+    data.forEach((row, idx) => {
+      const values = headers.map((h) => flattenValue(row[h]));
+      const excelRow = sheet.addRow([idx + 1, ...values]);
+
+      // Màu xen kẽ
+      if (idx % 2 === 1) {
+        excelRow.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF8F8F8" },
+          };
+        });
+      }
+
+      // Căn giữa cột STT
+      excelRow.getCell(1).alignment = { horizontal: "center" };
+    });
+    console.log(`  ✅ ${sheetName}: ${data.length} dòng`);
   }
 
-  // Lấy headers từ object đầu tiên
-  const headers = Object.keys(data[0]);
-  styleHeaderRow(sheet, headers, color);
-  autofitColumns(sheet, headers);
-
-  // Ghi từng dòng dữ liệu
-  data.forEach((row, idx) => {
-    const values = headers.map((h) => flattenValue(row[h]));
-    const excelRow = sheet.addRow([idx + 1, ...values]);
-
-    // Màu xen kẽ
-    if (idx % 2 === 1) {
-      excelRow.eachCell((cell) => {
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFF8F8F8" },
-        };
-      });
-    }
-
-    // Căn giữa cột STT
-    excelRow.getCell(1).alignment = { horizontal: "center" };
-  });
-
-  // Merge tiêu đề
-  const totalCols = headers.length + 1;
-  if (totalCols > 1) {
-    sheet.mergeCells(1, 1, 1, totalCols);
-  }
-
-  console.log(`  ✅ ${sheetName}: ${data.length} dòng`);
+  // Merge tiêu đề (row 1)
+  const totalCols = Math.max(headers.length + 1, 2);
+  sheet.mergeCells(1, 1, 1, totalCols);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -286,7 +298,11 @@ async function main() {
   const questions = await prisma.quizQuestion.findMany({ orderBy: { created_at: "desc" } });
   await writeTableToSheet(workbook, "quiz_questions", questions as never, "quiz_questions");
 
-  // ── 26. QuizAttempts ──
+  // ── 26. QuizOptions ──
+  const options = await prisma.quizOption.findMany({ orderBy: { created_at: "desc" } });
+  await writeTableToSheet(workbook, "quiz_options", options as never, "quiz_options");
+
+  // ── 27. QuizAttempts ──
   const attempts = await prisma.quizAttempt.findMany({ orderBy: { created_at: "desc" } });
   await writeTableToSheet(workbook, "quiz_attempts", attempts as never, "quiz_attempts");
 
