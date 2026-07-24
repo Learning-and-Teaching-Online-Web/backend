@@ -53,5 +53,27 @@ export const tutorService = {
       throw new Error('Hồ sơ gia sư không tồn tại');
     }
     return await tutorRepository.withdrawFunds(userId, tutor.tutor_id, amount, bankName, bankAccount);
+  },
+
+  // Get tutor profile with certificates
+  async getMyProfile(userId: string) {
+    return await tutorRepository.getMyProfile(userId);
+  },
+
+  // Update tutor profile
+  async updateMyProfile(userId: string, data: any) {
+    return await tutorRepository.updateMyProfile(userId, data);
+  },
+
+  // Add new certificate
+  async addCertificate(userId: string, certData: any) {
+    const tutor = await tutorRepository.getMyProfile(userId);
+    return await tutorRepository.addCertificate(tutor.tutor_id, certData);
+  },
+
+  // Delete certificate
+  async deleteCertificate(userId: string, certId: string) {
+    const tutor = await tutorRepository.getMyProfile(userId);
+    return await tutorRepository.deleteCertificate(tutor.tutor_id, certId);
   }
 };
