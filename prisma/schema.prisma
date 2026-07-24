@@ -162,6 +162,8 @@ model User {
   tutor_certificates TutorCertificate[]
   bookings           Booking[]
   transactions       Transaction[]
+  article_comments   ArticleComment[]
+  course_comments    CourseComment[]
 
   @@index([role, status], map: "idx_users_role_status")
   @@index([social_provider, social_id], map: "idx_users_social")
@@ -274,6 +276,7 @@ model Course {
   documents        Document[]
   ai_conversations AIConversation[]
   quizzes          Quiz[]
+  comments         CourseComment[]
 
   @@index([tutor_id, status], map: "idx_courses_tutor")
   @@index([subject, status, price], map: "idx_courses_subject")
@@ -747,21 +750,57 @@ model UserAddress {
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
   @@index([user_id], map: "idx_user_addresses_user")
-  @@map("user_addresses")
+  @@map("user_addresses")
 }
 
 model Article {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title         String
   excerpt       String
   content       Json
   date          String
   author        String
-  commentsCount Int      @default(0)
+  commentsCount Int              @default(0)
   category      String
   imageType     String
   tags          Json
-  created_at    DateTime @default(now()) @db.Timestamptz
+  created_at    DateTime         @default(now()) @db.Timestamptz
+  comments      ArticleComment[]
 
-  @@map("articles")
+  @@map("articles")
+}
+
+model ArticleComment {
+  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  article_id String   @db.Uuid
+  user_id    String   @db.Uuid
+  content    String
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  article Article @relation(fields: [article_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([article_id, created_at(sort: Desc)], map: "idx_article_comments_article")
+  @@index([user_id], map: "idx_article_comments_user")
+  @@map("article_comments")
+}
+
+model CourseComment {
+  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id  String   @db.Uuid
+  user_id    String   @db.Uuid
+  content    String
+  rating     Int?     @db.SmallInt
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  course Course @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([course_id, created_at(sort: Desc)], map: "idx_course_comments_course")
+  @@index([user_id], map: "idx_course_comments_user")
+  @@map("course_comments")
 }
