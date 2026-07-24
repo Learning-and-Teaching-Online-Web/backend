@@ -14,12 +14,25 @@ export const courseRepository = {
           }
         },
         schedules: true,
-        documents: true,
-        quizzes: true
+        documents: {
+          orderBy: { created_at: 'asc' }
+        },
+        quizzes: true,
+        bookings: {
+          where: { status: { in: ['confirmed', 'completed', 'pending'] } },
+          select: { student_id: true }
+        }
       }
     });
 
-    return data;
+    if (!data) return null;
+
+    const uniqueStudents = new Set(data.bookings?.map(b => b.student_id));
+    return {
+      ...data,
+      price: Number(data.price),
+      studentsCount: uniqueStudents.size
+    };
   },
 
   // Find all courses with pagination and filter support
@@ -61,7 +74,14 @@ export const courseRepository = {
               }
             },
           },
-          schedules: true
+          schedules: true,
+          documents: {
+            orderBy: { created_at: 'asc' }
+          },
+          bookings: {
+            where: { status: { in: ['confirmed', 'completed', 'pending'] } },
+            select: { student_id: true }
+          }
         },
         orderBy: { created_at: 'desc' },
         skip,
@@ -71,7 +91,16 @@ export const courseRepository = {
       prisma.course.count({ where: whereClause })
     ]);
 
-    return { data, count };
+    const mappedData = data.map(course => {
+      const uniqueStudents = new Set(course.bookings?.map(b => b.student_id));
+      return {
+        ...course,
+        price: Number(course.price),
+        studentsCount: uniqueStudents.size
+      };
+    });
+
+    return { data: mappedData, count };
   },
 
   // Insert a new course
