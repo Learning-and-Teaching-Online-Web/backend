@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase, supabaseAdmin } from '../config/supabase';
 import { userRepository } from '../repositories/user.repository';
 
 export const authService = {
@@ -63,8 +63,48 @@ export const authService = {
     const updatePayload: any = {};
     if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
     if (data.phone !== undefined) updatePayload.phone = data.phone;
-    if (data.avatarUrl !== undefined) updatePayload.avatar_url = data.avatarUrl;
     if (data.metadata !== undefined) updatePayload.metadata = data.metadata;
+
+    if (data.avatarUrl) {
+      let finalAvatarUrl = data.avatarUrl;
+      if (data.avatarUrl.startsWith('data:image/')) {
+        try {
+          try {
+            await supabaseAdmin.storage.createBucket('avatars', { public: true });
+          } catch (_) {
+            // Ignore if bucket already exists
+          }
+
+          let base64Data = data.avatarUrl;
+          let contentType = 'image/png';
+          if (base64Data.includes(';base64,')) {
+            const parts = base64Data.split(';base64,');
+            contentType = parts[0].replace('data:', '') || 'image/png';
+            base64Data = parts[1];
+          }
+
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = contentType.split('/')[1] || 'png';
+          const storagePath = `${userId}/avatar_${Date.now()}.${ext}`;
+
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from('avatars')
+            .upload(storagePath, buffer, { contentType, upsert: true });
+
+          if (!uploadError) {
+            const { data: urlData } = supabaseAdmin.storage
+              .from('avatars')
+              .getPublicUrl(storagePath);
+            finalAvatarUrl = urlData.publicUrl;
+          } else {
+            console.error('Supabase avatar upload error:', uploadError);
+          }
+        } catch (err) {
+          console.error('Error uploading avatar image:', err);
+        }
+      }
+      updatePayload.avatar_url = finalAvatarUrl;
+    }
 
     const updatedProfile = await userRepository.updateById(userId, updatePayload);
     return updatedProfile;
