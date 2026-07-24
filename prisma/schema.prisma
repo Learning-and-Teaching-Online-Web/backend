@@ -443,40 +443,49 @@ model Payout {
 // MODULE 5: CLASS SESSION & ATTENDANCE (Buổi học & Điểm danh)
 // ================================================================
 
+// Trạng thái của từng buổi học thực tế
 enum SessionStatus {
-  scheduled // Đã lên lịch
-  ongoing   // Đang diễn ra
-  completed // Đã hoàn thành
-  cancelled // Đã hủy
-  no_show   // Vắng mặt không lý do
+  scheduled // Đã lên lịch: Buổi học đã sinh ra từ Booking, chưa tới giờ dạy
+  ongoing   // Đang diễn ra: Gia sư và học sinh đang trong phòng học trực tuyến
+  completed // Đã hoàn thành: Dạy xong đủ thời lượng, gia sư bấm kết thúc
+  cancelled // Đã hủy: Buổi học bị hủy do xin nghỉ hoặc lý do đột xuất
+  no_show   // Vắng mặt: Đến giờ học nhưng một trong hai bên không vào phòng (timeout)
 }
 
+// Trạng thái điểm danh của từng cá nhân trong buổi học
 enum AttendanceStatus {
-  present // Có mặt
-  absent  // Vắng mặt
-  late    // Đi muộn
-  excused // Vắng có lý do
+  present // Có mặt: Vào lớp đúng giờ quy định
+  absent  // Vắng mặt: Không vào tham gia buổi học
+  late    // Đi muộn: Vào lớp trễ quá X phút so với lịch
+  excused // Vắng có lý do: Đã xin phép nghỉ và được gia sư/học sinh đồng ý
 }
 
+// Phương thức ghi nhận điểm danh
 enum AttendanceMethod {
-  manual // Điểm danh thủ công
-  auto   // Điểm danh tự động qua hệ thống
-  self   // Học sinh tự điểm danh
+  manual // Thủ công: Gia sư bấm điểm danh cho học sinh trên giao diện
+  auto   // Tự động: Hệ thống tự ghi nhận khi user kết nối Socket/WebRTC room
+  self   // Tự điểm danh: Học sinh chủ động bấm nút Check-in
 }
 
+// ================================================================
+// BẢNG: class_sessions
+// Mô tả: Đại diện cho 1 buổi học thực tế phát sinh từ Booking.
+//        1 Booking có nhiều buổi học (tương ứng total_sessions trong Course).
+// Luồng: Booking confirmed -> Tự động sinh N ClassSession -> Học sinh & Gia sư vào dạy -> completed.
+// ================================================================
 model ClassSession {
-  session_id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  booking_id          String        @db.Uuid
-  room_id             String
-  title               String?
-  scheduled_start     DateTime      @db.Timestamptz
-  scheduled_end       DateTime      @db.Timestamptz
-  actual_start        DateTime?     @db.Timestamptz
-  actual_end          DateTime?     @db.Timestamptz
-  status              SessionStatus @default(scheduled)
-  whiteboard_snapshot String?
-  notes               String?
-  created_at          DateTime      @default(now()) @db.Timestamptz
+  session_id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID định danh buổi học
+  booking_id          String        @db.Uuid // Khóa ngoại liên kết tới bookings.booking_id (Xóa booking -> xóa các buổi học)
+  room_id             String        // Mã phòng học trực tuyến (Video call / WebRTC Room ID)
+  title               String?       // Tiêu đề buổi học (VD: "Buổi 1: Giải tích giới hạn", "Buổi 2: Ôn tập đại số")
+  scheduled_start     DateTime      @db.Timestamptz // Thời gian bắt đầu buổi học theo lịch hẹn ban đầu
+  scheduled_end       DateTime      @db.Timestamptz // Thời gian kết thúc buổi học theo lịch hẹn ban đầu
+  actual_start        DateTime?     @db.Timestamptz // Thời điểm thực tế Gia sư bấm "Bắt đầu buổi học"
+  actual_end          DateTime?     @db.Timestamptz // Thời điểm thực tế Gia sư bấm "Kết thúc buổi học"
+  status              SessionStatus @default(scheduled) // Trạng thái tiến độ buổi học (scheduled -> ongoing -> completed)
+  whiteboard_snapshot String?       // Đường dẫn ảnh chụp trạng thái bảng vẽ điện tử khi kết thúc buổi (lưu cho học sinh ôn bài)
+  notes               String?       // Ghi chú nhận xét của gia sư về nội dung hoặc học lực trong buổi học
+  created_at          DateTime      @default(now()) @db.Timestamptz // Thời điểm tạo bản ghi buổi học
 
   // Relations
   booking            Booking            @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
@@ -492,16 +501,21 @@ model ClassSession {
   @@map("class_sessions")
 }
 
+// ================================================================
+// BẢNG: attendances
+// Mô tả: Lưu lịch sử điểm danh của TỪNG NGƯỜI DÙNG (Cả Học sinh & Gia sư) trong mỗi buổi học.
+// Mục đích: Xác minh cả 2 bên cùng tham gia để quyết định tính học phí hoặc giải quyết tranh chấp.
+// ================================================================
 model Attendance {
-  attendance_id    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  session_id       String            @db.Uuid
-  user_id          String            @db.Uuid
-  check_in_time    DateTime?         @db.Timestamptz
-  check_out_time   DateTime?         @db.Timestamptz
-  duration_minutes Int?              @db.SmallInt
-  status           AttendanceStatus  @default(absent)
-  method           AttendanceMethod? @default(manual)
-  created_at       DateTime          @default(now()) @db.Timestamptz
+  attendance_id    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi điểm danh
+  session_id       String            @db.Uuid // Khóa ngoại liên kết tới class_sessions.session_id (Xóa buổi học -> xóa điểm danh)
+  user_id          String            @db.Uuid // Khóa ngoại liên kết tới users.user_id (người được điểm danh)
+  check_in_time    DateTime?         @db.Timestamptz // Thời điểm thực tế user join vào phòng học
+  check_out_time   DateTime?         @db.Timestamptz // Thời điểm thực tế user rời khỏi phòng học
+  duration_minutes Int?              @db.SmallInt // Tổng thời gian thực tế ở trong phòng học (phút)
+  status           AttendanceStatus  @default(absent) // Kết quả điểm danh (present, absent, late, excused)
+  method           AttendanceMethod? @default(manual) // Phương thức điểm danh (manual, auto, self)
+  created_at       DateTime          @default(now()) @db.Timestamptz // Thời điểm tạo bản ghi điểm danh
 
   // Relations
   session ClassSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
@@ -512,16 +526,21 @@ model Attendance {
   @@map("attendances")
 }
 
+// ================================================================
+// BẢNG: session_recordings
+// Mô tả: Lưu các tệp ghi hình/ghi âm buổi học trực tuyến để học sinh có thể xem lại bài giảng.
+// Luồng: Kết thúc buổi -> Hệ thống tự động đẩy file lên Cloud -> set is_processed = true.
+// ================================================================
 model SessionRecording {
-  recording_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  session_id       String    @db.Uuid
-  file_url         String
-  file_size_mb     Decimal?  @db.Decimal(8, 2)
-  duration_seconds Int?
-  recorded_by      String    @db.Uuid
-  is_processed     Boolean   @default(false)
-  expires_at       DateTime? @db.Timestamptz
-  created_at       DateTime  @default(now()) @db.Timestamptz
+  recording_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của tệp ghi hình
+  session_id       String    @db.Uuid // Khóa ngoại liên kết tới class_sessions.session_id (Xóa buổi học -> xóa ghi hình)
+  file_url         String    // Đường dẫn xem/tải video ghi hình trên Cloud Storage
+  file_size_mb     Decimal?  @db.Decimal(8, 2) // Kích thước tệp tin (MB) để thống kê dung lượng lưu trữ
+  duration_seconds Int?      // Độ dài video tính bằng giây
+  recorded_by      String    @db.Uuid // FK tới users.user_id - Người bấm bắt đầu ghi hình (thường là gia sư)
+  is_processed     Boolean   @default(false) // Trạng thái xử lý video (false = đang encode/render, true = sẵn sàng xem)
+  expires_at       DateTime? @db.Timestamptz // Ngày hết hạn lưu trữ tệp (tự động dọn dẹp để tiết kiệm ổ đĩa)
+  created_at       DateTime  @default(now()) @db.Timestamptz // Thời điểm khởi tạo bản ghi video
 
   // Relations
   session ClassSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
@@ -535,28 +554,35 @@ model SessionRecording {
 // MODULE 6: CHAT & MESSAGING (Trò chuyện & Tin nhắn)
 // ================================================================
 
+// Phân loại nội dung tin nhắn
 enum MessageType {
-  text       // Tin nhắn văn bản
-  image      // Hình ảnh
-  file       // Tệp tin tài liệu
-  system     // Tin nhắn hệ thống
-  whiteboard // Ảnh chụp bảng vẽ
+  text       // Tin nhắn văn bản thuần túy
+  image      // Hình ảnh (ảnh bài tập, sơ đồ...)
+  file       // Tệp tin tài liệu (PDF, Word, Excel, Slide...)
+  system     // Tin nhắn tự động từ hệ thống (VD: "Phòng học đã bắt đầu", "Gia sư đã vào lớp")
+  whiteboard // Ảnh chụp snapshot bảng vẽ điện tử
 }
 
+// Phân loại không gian phòng trò chuyện
 enum RoomType {
-  direct    // Chat trực tiếp 1-1
-  group     // Chat nhóm
-  classroom // Phòng chat trong lớp học
+  direct    // Chat trực tiếp 1-1 giữa Học sinh và Gia sư
+  group     // Chat nhóm (dành cho các khóa học dạy nhóm nhiều học sinh)
+  classroom // Phòng chat trong lớp học trực tuyến (gắn với ClassSession)
 }
 
+// ================================================================
+// BẢNG: chat_rooms
+// Mô tả: Quản lý các phòng trò chuyện kết nối Học sinh và Gia sư.
+// Tối ưu: Dùng mảng JSON participants kèm chỉ mục GIN để lọc phòng chat của 1 User siêu tốc.
+// ================================================================
 model ChatRoom {
-  room_id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  session_id   String?  @db.Uuid
-  booking_id   String?  @db.Uuid
-  room_type    RoomType @default(direct)
-  title        String?
-  participants Json?    @default("[]")
-  created_at   DateTime @default(now()) @db.Timestamptz
+  room_id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho phòng chat
+  session_id   String?  @db.Uuid // FK tới class_sessions.session_id - Nếu phòng chat này thuộc 1 buổi học cụ thể
+  booking_id   String?  @db.Uuid // FK tới bookings.booking_id - Nếu phòng chat thuộc 1 hợp đồng đặt lịch
+  room_type    RoomType @default(direct) // Phân loại loại phòng (direct, group, classroom)
+  title        String?  // Tên phòng chat (VD: "Nhóm Toán 12 Thầy Bình", "Kênh thảo luận Buổi 1")
+  participants Json?    @default("[]") // Mảng JSON lưu danh sách User ID tham gia phòng (VD: ["user_id_1", "user_id_2"]). Có chỉ mục GIN
+  created_at   DateTime @default(now()) @db.Timestamptz // Thời điểm tạo phòng chat
 
   // Relations
   session  ClassSession? @relation(fields: [session_id], references: [session_id], onDelete: SetNull)
@@ -569,19 +595,24 @@ model ChatRoom {
   @@map("chat_rooms")
 }
 
+// ================================================================
+// BẢNG: messages
+// Mô tả: Lưu trữ chi tiết từng tin nhắn được gửi trong phòng chat.
+// Điểm nổi bật: Hỗ trợ tính năng Reply tin nhắn bằng quan hệ Self-Referencing (reply_to trỏ tới message_id).
+// ================================================================
 model Message {
-  message_id   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  room_id      String      @db.Uuid
-  sender_id    String      @db.Uuid
-  content      String?
-  message_type MessageType @default(text)
-  file_url     String?
-  file_name    String?
-  is_read      Boolean     @default(false)
-  read_at      DateTime?   @db.Timestamptz
-  reply_to     String?     @db.Uuid
-  sent_at      DateTime    @default(now()) @db.Timestamptz
-  created_at   DateTime    @default(now()) @db.Timestamptz
+  message_id   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho mỗi tin nhắn
+  room_id      String      @db.Uuid // Khóa ngoại liên kết tới chat_rooms.room_id (Xóa phòng chat -> xóa tin nhắn)
+  sender_id    String      @db.Uuid // Khóa ngoại liên kết tới users.user_id (người gửi tin nhắn)
+  content      String?     // Nội dung tin nhắn văn bản (null nếu chỉ gửi tệp/ảnh)
+  message_type MessageType @default(text) // Loại tin nhắn (text, image, file, system, whiteboard)
+  file_url     String?     // URL đường dẫn tệp tin/hình ảnh đính kèm (lưu trên Cloud Storage)
+  file_name    String?     // Tên gốc của tệp đính kèm do người gửi đặt (VD: "BaiTapToan_Tuan1.pdf")
+  is_read      Boolean     @default(false) // Trạng thái đã xem tin nhắn hay chưa (false = chưa đọc, true = đã xem)
+  read_at      DateTime?   @db.Timestamptz // Thời điểm người nhận mở xem tin nhắn
+  reply_to     String?     @db.Uuid // FK Self-Referencing trỏ tới messages.message_id (dùng cho tính năng Trả lời / Quote tin nhắn)
+  sent_at      DateTime    @default(now()) @db.Timestamptz // Thời điểm bấm gửi tin nhắn
+  created_at   DateTime    @default(now()) @db.Timestamptz // Thời điểm lưu tin nhắn vào CSDL
 
   // Relations
   room    ChatRoom  @relation(fields: [room_id], references: [room_id], onDelete: Cascade)
@@ -599,19 +630,24 @@ model Message {
 // MODULE 7: REVIEW, FAVORITE & MATCHING (Đánh giá, Yêu thích & Gợi ý)
 // ================================================================
 
+// ================================================================
+// BẢNG: reviews
+// Mô tả: Lưu trữ bài đánh giá chất lượng gia sư từ học sinh sau khi học xong.
+// Ràng buộc: booking_id @unique đảm bảo 1 đơn đặt lịch chỉ được viết 1 bài review (tránh spam).
+// ================================================================
 model Review {
-  review_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  booking_id      String   @unique @db.Uuid
-  student_id      String   @db.Uuid
-  tutor_id        String   @db.Uuid
-  rating          Int      @db.SmallInt
-  professionalism Int?     @db.SmallInt
-  communication   Int?     @db.SmallInt
-  punctuality     Int?     @db.SmallInt
-  comment         String?
-  is_visible      Boolean  @default(true)
-  created_at      DateTime @default(now()) @db.Timestamptz
-  updated_at      DateTime @default(now()) @db.Timestamptz
+  review_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho đánh giá
+  booking_id      String   @unique @db.Uuid // Khóa ngoại 1-1 với bookings.booking_id (chống đánh giá trùng lập)
+  student_id      String   @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (người viết review)
+  tutor_id        String   @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (gia sư nhận review)
+  rating          Int      @db.SmallInt // Điểm số đánh giá tổng thể (thang điểm 1 -> 5 sao)
+  professionalism Int?     @db.SmallInt // Điểm tiêu chí: Trình độ chuyên môn & Phương pháp giảng dạy (1-5 sao)
+  communication   Int?     @db.SmallInt // Điểm tiêu chí: Khả năng giao tiếp & Truyền đạt kiến thức (1-5 sao)
+  punctuality     Int?     @db.SmallInt // Điểm tiêu chí: Sự đúng giờ & Tác phong làm việc (1-5 sao)
+  comment         String?  // Nội dung nhận xét bằng văn bản của học sinh
+  is_visible      Boolean  @default(true) // Trạng thái hiển thị (true = công khai, false = tạm ẩn do vi phạm quy chuẩn)
+  created_at      DateTime @default(now()) @db.Timestamptz // Thời điểm tạo đánh giá
+  updated_at      DateTime @default(now()) @db.Timestamptz // Thời điểm chỉnh sửa đánh giá
 
   // Relations
   booking Booking        @relation(fields: [booking_id], references: [booking_id])
@@ -623,11 +659,16 @@ model Review {
   @@map("reviews")
 }
 
+// ================================================================
+// BẢNG: favorites
+// Mô tả: Danh sách gia sư yêu thích (Wishlist/Bookmark) của học sinh.
+// Ràng buộc: @@unique([student_id, tutor_id]) đảm bảo học sinh không thể lưu 1 gia sư 2 lần.
+// ================================================================
 model Favorite {
-  favorite_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_id  String   @db.Uuid
-  tutor_id    String   @db.Uuid
-  created_at  DateTime @default(now()) @db.Timestamptz
+  favorite_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho mục yêu thích
+  student_id  String   @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id
+  tutor_id    String   @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
+  created_at  DateTime @default(now()) @db.Timestamptz // Thời điểm bấm lưu gia sư yêu thích
 
   // Relations
   student StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -639,16 +680,21 @@ model Favorite {
   @@map("favorites")
 }
 
+// ================================================================
+// BẢNG: matching_logs
+// Mô tả: Nhật ký kết quả gợi ý Gia sư cho Học sinh do Thuật toán AI Matching thực hiện.
+// Mục đích: Đánh giá độ chính xác của thuật toán AI (Machine Learning CTR/Conversion Rate).
+// ================================================================
 model MatchingLog {
-  log_id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_id        String   @db.Uuid
-  tutor_id          String   @db.Uuid
-  match_score       Decimal? @db.Decimal(5, 2)
-  algorithm_version String?
-  factors_json      Json?
-  is_clicked        Boolean  @default(false)
-  is_booked         Boolean  @default(false)
-  created_at        DateTime @default(now()) @db.Timestamptz
+  log_id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi log AI
+  student_id        String   @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (người nhận gợi ý)
+  tutor_id          String   @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (gia sư được AI đề xuất)
+  match_score       Decimal? @db.Decimal(5, 2) // Điểm độ phù hợp tính bằng % do AI tính (VD: 95.50%)
+  algorithm_version String?  // Phiên bản thuật toán AI Matching (VD: "v1.0-content-based", "v2.0-hybrid")
+  factors_json      Json?    // Mảng JSON lưu chi tiết trọng số lý do ghép cặp (VD: {"subject_match": 1.0, "budget_match": 0.85})
+  is_clicked        Boolean  @default(false) // Cờ ghi nhận học sinh có bấm vào xem hồ sơ gia sư này không
+  is_booked         Boolean  @default(false) // Cờ ghi nhận học sinh có thực hiện đặt lịch sau gợi ý không
+  created_at        DateTime @default(now()) @db.Timestamptz // Thời điểm AI đưa ra gợi ý
 
   // Relations
   student StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -663,19 +709,24 @@ model MatchingLog {
 // MODULE 8: DOCUMENT & AI (Tài liệu học tập & Trợ lý AI)
 // ================================================================
 
+// ================================================================
+// BẢNG: documents
+// Mô tả: Quản lý tài liệu học tập (PDF, DOCX, Slide...) do Gia sư upload lên cho khóa học.
+// Mục đích: Làm dữ liệu đầu vào cho tính năng Trợ lý AI Hỏi đáp theo tài liệu (RAG - Retrieval-Augmented Generation).
+// ================================================================
 model Document {
-  doc_id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  course_id      String    @db.Uuid
-  uploaded_by    String    @db.Uuid
-  file_url       String
-  file_type      String
-  title          String
-  description    String?
-  extracted_text String?
-  is_indexed     Boolean   @default(false)
-  indexed_at     DateTime? @db.Timestamptz
-  metadata       Json?     @default("{}")
-  created_at     DateTime  @default(now()) @db.Timestamptz
+  doc_id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho tài liệu
+  course_id      String    @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa tài liệu)
+  uploaded_by    String    @db.Uuid // Khóa ngoại liên kết tới users.user_id (người tải tài liệu lên)
+  file_url       String    // Đường dẫn lưu file đính kèm thực tế trên Cloud Storage
+  file_type      String    // Phân loại định dạng tệp tin ("pdf", "docx", "pptx", "txt"...)
+  title          String    // Tên tiêu đề của tài liệu (VD: "Giáo trình Giải tích 12 - Chương 1")
+  description    String?   // Tóm tắt ngắn gọn mô tả nội dung tài liệu
+  extracted_text String?   // Nội dung văn bản thô bóc tách từ file PDF/DOCX (dùng cho thuật toán RAG)
+  is_indexed     Boolean   @default(false) // Trạng thái đã cắt chunk và vector hóa xong chưa (false = chưa, true = sẵn sàng RAG)
+  indexed_at     DateTime? @db.Timestamptz // Thời điểm hoàn tất đánh chỉ mục vector
+  metadata       Json?     @default("{}") // Mảng JSON chứa thông tin phụ (VD: {"page_count": 45, "author": "Nguyễn Văn A"})
+  created_at     DateTime  @default(now()) @db.Timestamptz // Thời điểm upload tài liệu
 
   // Relations
   course Course          @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
@@ -687,14 +738,19 @@ model Document {
   @@map("documents")
 }
 
+// ================================================================
+// BẢNG: document_chunks
+// Mô tả: Lưu trữ các đoạn văn bản nhỏ (Chunks) được chia từ tài liệu gốc cùng vector nhúng (Embedding).
+// Điểm nổi bật: Sử dụng kiểu dữ liệu Unsupported("vector(1536)") của pgvector (PostgreSQL) để thực hiện Similarity Search.
+// ================================================================
 model DocumentChunk {
-  chunk_id    String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  doc_id      String                       @db.Uuid
-  content     String
-  chunk_index Int
-  token_count Int?
-  embedding   Unsupported("vector(1536)")?
-  created_at  DateTime                     @default(now()) @db.Timestamptz
+  chunk_id    String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho đoạn chunk
+  doc_id      String                       @db.Uuid // Khóa ngoại liên kết tới documents.doc_id (Xóa tài liệu gốc -> xóa các chunk)
+  content     String                       // Nội dung văn bản của đoạn chunk đã được cắt nhỏ
+  chunk_index Int                          // Thứ tự của đoạn chunk trong tài liệu gốc (0, 1, 2...)
+  token_count Int?                         // Số lượng token tương ứng với đoạn chunk này
+  embedding   Unsupported("vector(1536)")? // Vector nhúng 1536 chiều sinh từ OpenAI/Gemini Embedding API (pgvector)
+  created_at  DateTime                     @default(now()) @db.Timestamptz // Thời điểm tạo chunk
 
   // Relations
   document Document @relation(fields: [doc_id], references: [doc_id], onDelete: Cascade)
@@ -703,17 +759,22 @@ model DocumentChunk {
   @@map("document_chunks")
 }
 
+// ================================================================
+// BẢNG: ai_conversations
+// Mô tả: Lưu trữ lịch sử hỏi đáp giữa Học sinh / Gia sư với Trợ lý AI (AI Tutor Assistant).
+// Quan hệ: Có thể gắn với 1 buổi học cụ thể (session_id) hoặc 1 khóa học (course_id) để khoanh vùng bối cảnh (Context Scope).
+// ================================================================
 model AIConversation {
-  conversation_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id         String   @db.Uuid
-  session_id      String?  @db.Uuid
-  course_id       String?  @db.Uuid
-  role            String
-  message         String
-  model_used      String?
-  tokens_used     Int?
-  timestamp       DateTime @default(now()) @db.Timestamptz
-  created_at      DateTime @default(now()) @db.Timestamptz
+  conversation_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi tin nhắn AI
+  user_id         String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (người thực hiện hỏi AI)
+  session_id      String?  @db.Uuid // FK tới class_sessions.session_id - Nếu hỏi AI trong phòng học trực tuyến
+  course_id       String?  @db.Uuid // FK tới courses.course_id - Nếu hỏi AI trong phạm vi khóa học
+  role            String   // Vai trò người gửi ("user" = câu hỏi học sinh, "assistant" = câu trả lời AI, "system" = prompt hệ thống)
+  message         String   // Nội dung văn bản của câu hỏi hoặc câu trả lời AI
+  model_used      String?  // Tên mô hình AI được sử dụng (VD: "gpt-4o", "gemini-1.5-pro")
+  tokens_used     Int?     // Tổng số token tiêu tốn (dùng để đo lường chi phí API)
+  timestamp       DateTime @default(now()) @db.Timestamptz // Thời điểm phát sinh câu hỏi/câu trả lời
+  created_at      DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bản ghi
 
   // Relations
   user    User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
@@ -729,31 +790,38 @@ model AIConversation {
 // MODULE 9: QUIZ (Bài kiểm tra trắc nghiệm & Tự luận)
 // ================================================================
 
+// Phân loại kiểu câu hỏi trong đề kiểm tra
 enum QuizQuestionType {
-  multiple_choice // Trắc nghiệm chọn 1 đáp án
-  true_false      // Đúng / Sai
-  fill_in_blank   // Điền vào chỗ trống
-  essay           // Tự luận
+  multiple_choice // Trắc nghiệm chọn 1 đáp án đúng từ các phương án (A, B, C, D)
+  true_false      // Độc lập dạng Chọn Đúng / Sai
+  fill_in_blank   // Điền câu trả lời ngắn vào chỗ trống
+  essay           // Tự luận (cần giáo viên hoặc AI chấm điểm chi tiết)
 }
 
+// Trạng thái của bài kiểm tra
 enum QuizStatus {
-  draft     // Nháp
-  published // Đã phát hành
-  archived  // Lưu trữ
+  draft     // Bản nháp: Gia sư hoặc AI đang tạo đề, học sinh chưa nhìn thấy
+  published // Đã phát hành: Học sinh có thể vào làm bài kiểm tra
+  archived  // Lưu trữ: Đã đóng, dùng để lưu lịch sử làm bài
 }
 
+// ================================================================
+// BẢNG: quizzes
+// Mô tả: Quản lý danh mục bài kiểm tra / đề thi gắn với từng Khóa học.
+// Điểm nổi bật: Hỗ trợ tính năng AI tự động sinh đề thi từ tài liệu (generated_by_ai = true).
+// ================================================================
 model Quiz {
-  quiz_id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  course_id          String     @db.Uuid
-  title              String
-  description        String?
-  generated_by_ai    Boolean    @default(false)
-  ai_model_version   String?
-  time_limit_minutes Int?
-  max_attempts       Int        @default(1)
-  passing_score      Int?       @db.SmallInt
-  status             QuizStatus @default(draft)
-  created_at         DateTime   @default(now()) @db.Timestamptz
+  quiz_id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài quiz
+  course_id          String     @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa các bài quiz)
+  title              String     // Tiêu đề bài kiểm tra (VD: "Kiểm tra 15 phút - Đạo hàm & Tiệm cận")
+  description        String?    // Mô tả hướng dẫn hoặc lưu ý khi học sinh làm bài
+  generated_by_ai    Boolean    @default(false) // Cờ đánh dấu đề thi do AI tự động khởi tạo từ tài liệu học tập
+  ai_model_version   String?    // Phiên bản mô hình AI sinh đề (VD: "gpt-4o", "gemini-1.5-flash")
+  time_limit_minutes Int?       // Thời gian giới hạn làm bài tính bằng phút (null = làm tự do không giới hạn thời gian)
+  max_attempts       Int        @default(1) // Số lần làm bài tối đa của 1 học sinh (mặc định 1 lần)
+  passing_score      Int?       @db.SmallInt // Điểm tối thiểu để được tính là Đạt / Qua bài thi (VD: 5/10)
+  status             QuizStatus @default(draft) // Trạng thái bài kiểm tra (draft -> published -> archived)
+  created_at         DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo bài quiz
 
   // Relations
   course    Course         @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
@@ -764,17 +832,22 @@ model Quiz {
   @@map("quizzes")
 }
 
+// ================================================================
+// BẢNG: quiz_questions
+// Mô tả: Lưu trữ danh sách các câu hỏi trong đề thi.
+// Thiết kế: Sử dụng options_json lưu mảng các phương án trắc nghiệm giúp render UI cực kỳ linh hoạt.
+// ================================================================
 model QuizQuestion {
-  question_id    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  quiz_id        String           @db.Uuid
-  question_text  String
-  question_type  QuizQuestionType @default(multiple_choice)
-  options_json   Json?
-  correct_answer String?
-  explanation    String?
-  points         Int              @default(1) @db.SmallInt
-  order_index    Int              @default(0)
-  created_at     DateTime         @default(now()) @db.Timestamptz
+  question_id    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho câu hỏi
+  quiz_id        String           @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (Xóa bài quiz -> xóa các câu hỏi)
+  question_text  String           // Nội dung văn bản câu hỏi
+  question_type  QuizQuestionType @default(multiple_choice) // Phân loại kiểu câu hỏi (multiple_choice, true_false...)
+  options_json   Json?            // Mảng JSON các lựa chọn trắc nghiệm (VD: ["A. 1", "B. 2", "C. 3", "D. 4"])
+  correct_answer String?          // Đáp án đúng chuẩn dùng để hệ thống chấm điểm tự động (Auto-grading)
+  explanation    String?          // Lời giải chi tiết / Hướng dẫn phương pháp giải giúp học sinh ôn luyện
+  points         Int              @default(1) @db.SmallInt // Điểm số tương ứng với câu hỏi (mặc định = 1)
+  order_index    Int              @default(0) // Thứ tự hiển thị của câu hỏi trong đề thi (0, 1, 2...)
+  created_at     DateTime         @default(now()) @db.Timestamptz // Thời điểm tạo câu hỏi
 
   // Relations
   quiz Quiz @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade)
@@ -783,18 +856,23 @@ model QuizQuestion {
   @@map("quiz_questions")
 }
 
+// ================================================================
+// BẢNG: quiz_attempts
+// Mô tả: Lưu trữ kết quả thực tế từng lần học sinh tham gia làm bài thi.
+// Luồng: Học sinh bấm làm -> Lưu started_at -> Học sinh nộp bài -> Tự động tính score, duration_seconds, is_passed.
+// ================================================================
 model QuizAttempt {
-  attempt_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_id       String    @db.Uuid
-  quiz_id          String    @db.Uuid
-  score            Decimal?  @db.Decimal(5, 2)
-  total_points     Int?
-  answers_json     Json?     @default("[]")
-  started_at       DateTime  @default(now()) @db.Timestamptz
-  completed_at     DateTime? @db.Timestamptz
-  duration_seconds Int?
-  is_passed        Boolean?
-  created_at       DateTime  @default(now()) @db.Timestamptz
+  attempt_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho lượt làm bài
+  student_id       String    @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (học sinh tham gia làm bài)
+  quiz_id          String    @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (bài quiz được thực hiện)
+  score            Decimal?  @db.Decimal(5, 2) // Điểm số học sinh đạt được (VD: 8.50)
+  total_points     Int?      // Tổng điểm tối đa của đề thi tại thời điểm làm bài
+  answers_json     Json?     @default("[]") // Mảng JSON lưu trữ danh sách các câu trả lời học sinh đã nộp
+  started_at       DateTime  @default(now()) @db.Timestamptz // Thời điểm bắt đầu làm bài
+  completed_at     DateTime? @db.Timestamptz // Thời điểm học sinh hoàn thành và nộp bài
+  duration_seconds Int?      // Thời gian thực tế học sinh làm bài (tính bằng giây)
+  is_passed        Boolean?  // Cờ đánh dấu học sinh có Đạt hay không (score >= passing_score)
+  created_at       DateTime  @default(now()) @db.Timestamptz // Thời điểm lưu lượt làm bài
 
   // Relations
   student StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -809,15 +887,20 @@ model QuizAttempt {
 // MODULE 10: ADMIN & SYSTEM (Quản trị hệ thống & Bảng vẽ)
 // ================================================================
 
+// ================================================================
+// BẢNG: admin_logs
+// Mô tả: Nhật ký ghi vết mọi hành động quản trị của Admin (Audit Log / Audit Trail).
+// Mục đích: Phục vụ bảo mật, truy vết sự cố, kiểm tra quyền hạn và đảm bảo tính minh bạch hệ thống.
+// ================================================================
 model AdminLog {
-  log_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  admin_id     String   @db.Uuid
-  action       String
-  target_type  String
-  target_id    String?  @db.Uuid
-  details_json Json?
-  ip_address   String?
-  created_at   DateTime @default(now()) @db.Timestamptz
+  log_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi audit log
+  admin_id     String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (tài khoản Admin thực hiện thao tác)
+  action       String   // Tên hành động quản trị (VD: "APPROVE_TUTOR", "SUSPEND_USER", "REFUND_BOOKING")
+  target_type  String   // Phân loại đối tượng chịu tác động (VD: "USER", "TUTOR_PROFILE", "BOOKING", "PAYOUT")
+  target_id    String?  @db.Uuid // Mã ID định danh của đối tượng chịu tác động
+  details_json Json?    // Mảng JSON ghi nhận chi tiết dữ liệu trước và sau khi Admin thay đổi
+  ip_address   String?  // Địa chỉ IP của Admin tại thời điểm gửi yêu cầu thao tác
+  created_at   DateTime @default(now()) @db.Timestamptz // Thời điểm thực hiện hành động quản trị
 
   // Relations
   admin User @relation(fields: [admin_id], references: [user_id])
@@ -827,22 +910,32 @@ model AdminLog {
   @@map("admin_logs")
 }
 
+// ================================================================
+// BẢNG: system_configs
+// Mô tả: Lưu trữ các tham số cấu hình động toàn hệ thống dưới dạng cặp Khóa - Giá trị (Key-Value).
+// Ưu điểm: Cho phép Admin thay đổi tham số kinh doanh (tỷ lệ hoa hồng, kích thước file...) mà không cần sửa code/re-deploy.
+// ================================================================
 model SystemConfig {
-  config_key   String   @id
-  config_value String?
-  description  String?
-  updated_at   DateTime @default(now()) @db.Timestamptz
+  config_key   String   @id // Khóa chính đại diện tên cấu hình (VD: "COMMISSION_RATE", "MAX_FILE_SIZE_MB", "MAINTENANCE_MODE")
+  config_value String?  // Giá trị cấu hình tương ứng dưới dạng chuỗi (VD: "15.0", "50", "false")
+  description  String?  // Mô tả ý nghĩa và mục đích sử dụng của tham số cấu hình này
+  updated_at   DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật giá trị cấu hình mới nhất
 
   @@map("system_configs")
 }
 
+// ================================================================
+// BẢNG: whiteboard_states
+// Mô tả: Lưu trữ các trạng thái dữ liệu nét vẽ (Canvas Drawing Data) của Bảng vẽ điện tử trực tuyến.
+// Luồng: Truyền real-time qua WebSockets (Socket.IO) -> Định kỳ lưu snapshot JSON vào CSDL để học sinh ôn lại bài.
+// ================================================================
 model WhiteboardState {
-  state_id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  session_id        String   @db.Uuid
-  drawing_data_json Json
-  timestamp         DateTime @default(now()) @db.Timestamptz
-  created_by        String   @db.Uuid
-  created_at        DateTime @default(now()) @db.Timestamptz
+  state_id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho trạng thái bảng vẽ
+  session_id        String   @db.Uuid // Khóa ngoại liên kết tới class_sessions.session_id (Xóa buổi học -> xóa các nét vẽ)
+  drawing_data_json Json     // Dữ liệu JSON chứa mảng các nét vẽ, tọa độ, hình học, màu sắc trên canvas
+  timestamp         DateTime @default(now()) @db.Timestamptz // Thời điểm phát sinh / đồng bộ nét vẽ
+  created_by        String   @db.Uuid // FK tới users.user_id - Người thực hiện nét vẽ (Gia sư hoặc Học sinh)
+  created_at        DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bản ghi snapshot nét vẽ
 
   // Relations
   session ClassSession @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
@@ -856,30 +949,40 @@ model WhiteboardState {
 // MODULE 11: ARTICLE & COMMENT (Bài viết & Bình luận)
 // ================================================================
 
+// ================================================================
+// BẢNG: articles
+// Mô tả: Quản lý các bài viết tin tức, bí quyết ôn thi, kinh nghiệm học tập và thông báo hệ thống.
+// Thiết kế: Sử dụng kiểu dữ liệu Json cho content để lưu trữ nội dung Rich Text Block dạng EditorJS.
+// ================================================================
 model Article {
-  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  title         String
-  excerpt       String
-  content       Json
-  date          String
-  author        String
-  commentsCount Int              @default(0)
-  category      String
-  imageType     String
-  tags          Json
-  created_at    DateTime         @default(now()) @db.Timestamptz
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài viết
+  title         String           // Tiêu đề bài viết (VD: "Bí quyết đạt 8.0 IELTS trong 6 tháng")
+  excerpt       String           // Đoạn trích dẫn ngắn / Tóm tắt nội dung bài viết
+  content       Json             // Nội dung chi tiết bài viết dưới dạng mảng JSON Rich Text Blocks
+  date          String           // Ngày xuất bản bài viết dạng chuỗi hiển thị (VD: "24/07/2026")
+  author        String           // Tên tác giả hoặc tên ban biên tập đăng bài
+  commentsCount Int              @default(0) // Tổng số lượng bình luận của bài viết (lưu denormalized để truy vấn siêu tốc)
+  category      String           // Phân loại danh mục bài viết (VD: "Kinh nghiệm ôn thi", "Tin tức giáo dục")
+  imageType     String           // Phân loại ảnh đại diện / Banner minh họa cho bài viết
+  tags          Json             // Mảng JSON chứa các từ khóa thẻ tag (VD: ["IELTS", "Mẹo thi", "Toán 12"])
+  created_at    DateTime         @default(now()) @db.Timestamptz // Thời điểm tạo bài viết
   comments      ArticleComment[]
 
   @@map("articles")
 }
 
+// ================================================================
+// BẢNG: article_comments
+// Mô tả: Lưu trữ các bình luận trao đổi của học sinh/gia sư bên dưới mỗi bài viết blog/tin tức.
+// Quan hệ: N-1 với articles (article_id) và users (user_id).
+// ================================================================
 model ArticleComment {
-  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  article_id String   @db.Uuid
-  user_id    String   @db.Uuid
-  content    String
-  created_at DateTime @default(now()) @db.Timestamptz
-  updated_at DateTime @default(now()) @db.Timestamptz
+  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bình luận bài viết
+  article_id String   @db.Uuid // Khóa ngoại liên kết tới articles.id (Xóa bài viết -> xóa các bình luận)
+  user_id    String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (người viết bình luận)
+  content    String   // Nội dung văn bản bình luận
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm gửi bình luận
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm chỉnh sửa bình luận
 
   // Relations
   article Article @relation(fields: [article_id], references: [id], onDelete: Cascade)
@@ -890,14 +993,19 @@ model ArticleComment {
   @@map("article_comments")
 }
 
+// ================================================================
+// BẢNG: course_comments
+// Mô tả: Lưu trữ các bình luận hỏi đáp, thắc mắc công khai của người dùng trên trang chi tiết Khóa học.
+// Phân biệt: Khác với Review (Module 7 - chỉ viết sau khi học xong), CourseComment dành cho thảo luận trước khi mua.
+// ================================================================
 model CourseComment {
-  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  course_id  String   @db.Uuid
-  user_id    String   @db.Uuid
-  content    String
-  rating     Int?     @db.SmallInt
-  created_at DateTime @default(now()) @db.Timestamptz
-  updated_at DateTime @default(now()) @db.Timestamptz
+  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bình luận khóa học
+  course_id  String   @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa bình luận)
+  user_id    String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (người đăng thắc mắc/bình luận)
+  content    String   // Nội dung văn bản thắc mắc hoặc thảo luận
+  rating     Int?     @db.SmallInt // Điểm số đánh giá tùy chọn (1 đến 5 sao)
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bình luận
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật bình luận
 
   // Relations
   course Course @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
