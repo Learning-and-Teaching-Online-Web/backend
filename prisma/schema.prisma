@@ -838,22 +838,41 @@ model Quiz {
 // Thiết kế: Sử dụng options_json lưu mảng các phương án trắc nghiệm giúp render UI cực kỳ linh hoạt.
 // ================================================================
 model QuizQuestion {
-  question_id    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho câu hỏi
-  quiz_id        String           @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (Xóa bài quiz -> xóa các câu hỏi)
-  question_text  String           // Nội dung văn bản câu hỏi
-  question_type  QuizQuestionType @default(multiple_choice) // Phân loại kiểu câu hỏi (multiple_choice, true_false...)
-  options_json   Json?            // Mảng JSON các lựa chọn trắc nghiệm (VD: ["A. 1", "B. 2", "C. 3", "D. 4"])
-  correct_answer String?          // Đáp án đúng chuẩn dùng để hệ thống chấm điểm tự động (Auto-grading)
-  explanation    String?          // Lời giải chi tiết / Hướng dẫn phương pháp giải giúp học sinh ôn luyện
-  points         Int              @default(1) @db.SmallInt // Điểm số tương ứng với câu hỏi (mặc định = 1)
-  order_index    Int              @default(0) // Thứ tự hiển thị của câu hỏi trong đề thi (0, 1, 2...)
-  created_at     DateTime         @default(now()) @db.Timestamptz // Thời điểm tạo câu hỏi
+  question_id   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho câu hỏi
+  quiz_id       String           @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (Xóa bài quiz -> xóa các câu hỏi)
+  question_text String           // Nội dung văn bản câu hỏi
+  question_type QuizQuestionType @default(multiple_choice) // Phân loại kiểu câu hỏi (multiple_choice, true_false...)
+  explanation   String?          // Lời giải chi tiết / Hướng dẫn phương pháp giải giúp học sinh ôn luyện
+  points        Int              @default(1) @db.SmallInt // Điểm số tương ứng với câu hỏi (mặc định = 1)
+  order_index   Int              @default(0) // Thứ tự hiển thị của câu hỏi trong đề thi (0, 1, 2...)
+  created_at    DateTime         @default(now()) @db.Timestamptz // Thời điểm tạo câu hỏi
 
   // Relations
-  quiz Quiz @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade)
+  quiz    Quiz         @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade)
+  options QuizOption[]
 
   @@index([quiz_id, order_index], map: "idx_quiz_questions_quiz")
   @@map("quiz_questions")
+}
+
+// ================================================================
+// BẢNG: quiz_options
+// Mô tả: Lưu trữ các phương án lựa chọn trắc nghiệm cho từng câu hỏi.
+// Thiết kế: Chuẩn hóa 3NF tách riêng khỏi QuizQuestion giúp chấm điểm chính xác và chống lệch dữ liệu.
+// ================================================================
+model QuizOption {
+  option_id   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho lựa chọn đáp án
+  question_id String       @db.Uuid // Khóa ngoại liên kết tới quiz_questions.question_id (Xóa câu hỏi -> xóa các lựa chọn)
+  content     String       // Nội dung phương án lựa chọn (VD: "Đáp án A: 12", "Hà Nội")
+  is_correct  Boolean      @default(false) // Đánh dấu đây có phải đáp án đúng hay không (true = đúng)
+  order_index Int          @default(0) // Thứ tự hiển thị của phương án trong câu hỏi (0, 1, 2...)
+  created_at  DateTime     @default(now()) @db.Timestamptz // Thời điểm tạo phương án
+
+  // Relations
+  question QuizQuestion @relation(fields: [question_id], references: [question_id], onDelete: Cascade)
+
+  @@index([question_id, order_index], map: "idx_quiz_options_question")
+  @@map("quiz_options")
 }
 
 // ================================================================
@@ -959,7 +978,7 @@ model Article {
   title         String           // Tiêu đề bài viết (VD: "Bí quyết đạt 8.0 IELTS trong 6 tháng")
   excerpt       String           // Đoạn trích dẫn ngắn / Tóm tắt nội dung bài viết
   content       Json             // Nội dung chi tiết bài viết dưới dạng mảng JSON Rich Text Blocks
-  date          String           // Ngày xuất bản bài viết dạng chuỗi hiển thị (VD: "24/07/2026")
+  published_at  DateTime?        @db.Timestamptz // Thời điểm xuất bản bài viết (thay thế date String để hỗ trợ sắp xếp & lọc khoảng thời gian)
   author        String           // Tên tác giả hoặc tên ban biên tập đăng bài
   commentsCount Int              @default(0) // Tổng số lượng bình luận của bài viết (lưu denormalized để truy vấn siêu tốc)
   category      String           // Phân loại danh mục bài viết (VD: "Kinh nghiệm ôn thi", "Tin tức giáo dục")

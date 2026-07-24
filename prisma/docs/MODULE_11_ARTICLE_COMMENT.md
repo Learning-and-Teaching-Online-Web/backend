@@ -38,7 +38,7 @@ Module **Article & Comment** cung cấp tính năng xuất bản bài viết blo
   |     | title (String)              |
   |     | excerpt (String)            |
   |     | content (Json RichText)     |
-  |     | date (String)               |
+  |     | published_at (DateTime?)    |
   |     | author (String)             |
   |     | commentsCount (Int)         |
   |     | category (String)           |
@@ -61,7 +61,7 @@ Module **Article & Comment** cung cấp tính năng xuất bản bài viết blo
 | `title` | `String` | Bắt buộc | Tiêu đề bài viết (VD: "Bí quyết đạt 8.0 IELTS trong 6 tháng"). |
 | `excerpt` | `String` | Bắt buộc | Đoạn trích dẫn ngắn / Tóm tắt nội dung bài viết. |
 | `content` | `Json` | Bắt buộc | Nội dung chi tiết bài viết dưới dạng mảng JSON Rich Text Blocks. |
-| `date` | `String` | Bắt buộc | Ngày xuất bản bài viết dạng chuỗi hiển thị (VD: "24/07/2026"). |
+| `published_at` | `DateTime?` | `@db.Timestamptz` | Thời điểm xuất bản bài viết (hỗ trợ sắp xếp & lọc theo khoảng thời gian). |
 | `author` | `String` | Bắt buộc | Tên tác giả hoặc nguồn đăng bài (VD: "Ban biên tập Gia sư AI"). |
 | `commentsCount` | `Int` | `@default(0)` | Tổng số lượng bình luận của bài viết (lưu denormalized). |
 | `category` | `String` | Bắt buộc | Phân loại danh mục bài viết (`Kinh nghiệm ôn thi`, `Tin tức`...). |

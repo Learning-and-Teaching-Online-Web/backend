@@ -52,12 +52,22 @@ Module **Quiz** quản lý hệ thống tạo đề thi, tổ chức kiểm tra 
   | FK  | quiz_id -> quizzes          |        | FK  | student_id -> student       |
   |     | question_text (String)      |        | FK  | quiz_id -> quizzes          |
   |     | question_type (Enum)        |        |     | score (Decimal 5,2)         |
-  |     | options_json (Json?)        |        |     | total_points (Int?)         |
-  |     | correct_answer (String?)    |        |     | answers_json (Json?)        |
-  |     | explanation (String?)       |        |     | started_at / completed_at   |
-  |     | points (SmallInt)           |        |     | duration_seconds (Int?)     |
-  |     | order_index (Int)           |        |     | is_passed (Boolean?)        |
-  +-----------------------------------+        +-----------------------------------+
+  |     | explanation (String?)       |        |     | total_points (Int?)         |
+  |     | points (SmallInt)           |        |     | answers_json (Json?)        |
+  |     | order_index (Int)           |        |     | started_at / completed_at   |
+  +-----------------------------------+        |     | duration_seconds (Int?)     |
+                    |                          |     | is_passed (Boolean?)        |
+                    | (1 - N)                  +-----------------------------------+
+                    v
+  +-----------------------------------+
+  |            quiz_options           |
+  +-----------------------------------+
+  | PK  | option_id (UUID)            |
+  | FK  | question_id -> questions    |
+  |     | content (String)            |
+  |     | is_correct (Boolean)        |
+  |     | order_index (Int)           |
+  +-----------------------------------+
 ```
 
 ---
@@ -65,7 +75,7 @@ Module **Quiz** quản lý hệ thống tạo đề thi, tổ chức kiểm tra 
 ## 3. Chi tiết các Kiểu dữ liệu liệt kê (ENUMs)
 
 ### 3.1. `QuizQuestionType` (Loại câu hỏi trong đề)
-*   `multiple_choice`: Trắc nghiệm chọn 1 phương án đúng trong mảng `options_json`.
+*   `multiple_choice`: Trắc nghiệm chọn 1 hoặc nhiều phương án trong bảng `quiz_options`.
 *   `true_false`: Câu hỏi kiểm tra tính Đúng hoặc Sai của mệnh đề.
 *   `fill_in_blank`: Điền từ / câu trả lời ngắn vào vị trí còn thiếu.
 *   `essay`: Câu hỏi tự luận dạng bài viết mở (Gia sư hoặc AI chấm điểm thủ công).
@@ -105,8 +115,6 @@ Module **Quiz** quản lý hệ thống tạo đề thi, tổ chức kiểm tra 
 | `quiz_id` | `String` (UUID) | `@db.Uuid`, Khóa ngoại -> `quizzes` | Liên kết đề thi gốc (`onDelete: Cascade`). |
 | `question_text` | `String` | Bắt buộc | Nội dung chữ của câu hỏi. |
 | `question_type` | `QuizQuestionType` | `@default(multiple_choice)` | Loại câu hỏi (`multiple_choice`, `true_false`...). |
-| `options_json` | `Json?` | Tùy chọn | Mảng JSON các phương án trắc nghiệm (VD: `["A. 1", "B. 2"]`). |
-| `correct_answer` | `String?` | Tùy chọn | Đáp án đúng dùng để chấm điểm tự động (Auto-grading). |
 | `explanation` | `String?` | Tùy chọn | Lời giải chi tiết / Hướng dẫn học sinh sau khi nộp bài. |
 | `points` | `Int` | `@default(1)`, `@db.SmallInt` | Điểm số tương ứng với câu hỏi này (mặc định = 1). |
 | `order_index` | `Int` | `@default(0)` | Thứ tự câu hỏi hiển thị trong đề thi (0, 1, 2...). |
@@ -114,7 +122,20 @@ Module **Quiz** quản lý hệ thống tạo đề thi, tổ chức kiểm tra 
 
 ---
 
-### 4.3. Bảng `quiz_attempts` (Lượt làm bài & Kết quả)
+### 4.3. Bảng `quiz_options` (Phương án trắc nghiệm chuẩn hóa 3NF)
+
+| Thuộc tính (Column) | Kiểu dữ liệu (Type) | Ràng buộc (Constraints) | Ý nghĩa & Mục đích sử dụng |
+| :--- | :--- | :--- | :--- |
+| `option_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính UUID định danh lựa chọn đáp án. |
+| `question_id` | `String` (UUID) | `@db.Uuid`, Khóa ngoại -> `quiz_questions` | Liên kết câu hỏi gốc (`onDelete: Cascade`). |
+| `content` | `String` | Bắt buộc | Nội dung văn bản đáp án lựa chọn. |
+| `is_correct` | `Boolean` | `@default(false)` | Đánh dấu đây là đáp án đúng (`true`) hay sai (`false`). |
+| `order_index` | `Int` | `@default(0)` | Thứ tự hiển thị phương án trong câu hỏi (0, 1, 2...). |
+| `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Thời điểm tạo phương án. |
+
+---
+
+### 4.4. Bảng `quiz_attempts` (Lượt làm bài & Kết quả)
 
 | Thuộc tính (Column) | Kiểu dữ liệu (Type) | Ràng buộc (Constraints) | Ý nghĩa & Mục đích sử dụng |
 | :--- | :--- | :--- | :--- |
@@ -147,7 +168,7 @@ Khởi tạo bản ghi `quiz_attempts` (started_at = now())
 [3. Học sinh chọn đáp án & Bấm Nộp bài]
         ↓
 Hệ thống chấm điểm tự động Backend (Auto-grading):
-- So sánh `answers_json` gửi lên với `correct_answer` của từng câu trong `quiz_questions`
+- So sánh `answers_json` gửi lên với các `quiz_options` có `is_correct = true` trong CSDL
 - Tính tổng `score` = Sum(points các câu đúng)
 - Tính `duration_seconds` = completed_at - started_at
 - Đánh giá `is_passed` = (score >= passing_score)
@@ -160,10 +181,10 @@ Hệ thống chấm điểm tự động Backend (Auto-grading):
 ## 6. Giải thích Lý do Thiết kế & Điểm "ăn điểm" với Giáo viên
 
 1. **Tính năng AI Sinh đề thi (`generated_by_ai`) hoạt động như thế nào?**
-   * **Kết hợp Module 8 & Module 9:** AI truy vấn các `document_chunks` của khóa học, tự động trích xuất các ý chính để tạo ra câu hỏi, mảng các phương án nhiễu (`options_json`), đáp án chuẩn (`correct_answer`) và lời giải chi tiết (`explanation`) dạng JSON chuẩn hóa để chèn thẳng vào bảng `quiz_questions`.
+   * **Kết hợp Module 8 & Module 9:** AI truy vấn các `document_chunks` của khóa học, tự động trích xuất các ý chính để tạo ra câu hỏi trong `quiz_questions`, sinh danh sách phương án trắc nghiệm với cờ `is_correct` tương ứng trong `quiz_options`, cùng lời giải chi tiết (`explanation`).
 
-2. **Tại sao sử dụng cột `options_json` thay vì tách thành bảng riêng `quiz_options`?**
-   * **Tối ưu truy vấn &Render UI:** Tránh việc phải `JOIN` bảng phức tạp chỉ để lấy danh sách các lựa chọn trắc nghiệm khi render đề thi. Giúp giao diện load danh sách câu hỏi cực nhanh trong 1 câu SQL duy nhất.
+2. **Lợi ích của việc chuẩn hóa tách bảng `quiz_options` (Chuẩn 3NF)?**
+   * **Đảm bảo tính nhất quán dữ liệu (Data Integrity):** Tách phương án thành các bản ghi trong `quiz_options` loại bỏ nguy cơ lệch dữ liệu giữa danh sách lựa chọn và đáp án đúng. Cho phép truy vấn, sắp xếp thứ tự (`order_index`), trộn đáp án (shuffle) và thống kê kết quả học sinh chọn từng phương án một cách chính xác tuyệt đối.
 
 3. **Cơ chế chấm điểm tự động (Auto-grading) được đảm bảo ra sao?**
-   * Với các câu hỏi trắc nghiệm (`multiple_choice`, `true_false`, `fill_in_blank`), đáp án chuẩn `correct_answer` nằm an toàn ở Backend. Học sinh không thể xem trước đáp án khi làm bài. Khi nộp bài, Backend tự động so khớp `answers_json` của lượt làm thi với `correct_answer` và trả về kết quả ngay lập tức.
+   * Cờ `is_correct` nằm an toàn ở bảng `quiz_options` phía Backend. Học sinh khi làm bài chỉ nhận về danh sách lựa chọn (`option_id`, `content`). Khi nộp bài, Backend so khớp `answers_json` (chứa `option_id` được chọn) với các option có `is_correct = true` trong CSDL và tính điểm tức thì.
