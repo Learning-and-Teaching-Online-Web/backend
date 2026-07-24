@@ -29,6 +29,19 @@ export const articleRepository = {
     });
   },
 
+  async update(id: string, data: any) {
+    return await prisma.article.update({
+      where: { id },
+      data
+    });
+  },
+
+  async delete(id: string) {
+    return await prisma.article.delete({
+      where: { id }
+    });
+  },
+
   async createMany(articles: any[]) {
     return await prisma.article.createMany({
       data: articles,
