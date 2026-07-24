@@ -133,21 +133,22 @@ enum QuizStatus {
 model User {
   user_id         String     @id @db.Uuid
   email           String     @unique @db.Citext
-  password_hash   String?
   full_name       String
   phone           String?
   avatar_url      String?
+  date_of_birth   DateTime?  @db.Date
+  gender          String?    // "male" | "female" | "other"
+  bio             String?
   role            UserRole   @default(student)
   status          UserStatus @default(active)
   email_verified  Boolean    @default(false)
   social_provider String?
   social_id       String?
-  metadata        Json?      @default("{}")
   created_at      DateTime   @default(now()) @db.Timestamptz
   updated_at      DateTime   @default(now()) @db.Timestamptz
   last_login_at   DateTime?  @db.Timestamptz
 
-  // Relations
+  // Relations
   tutor_profile      TutorProfile?
   student_profile    StudentProfile?
   wallets            Wallet?
