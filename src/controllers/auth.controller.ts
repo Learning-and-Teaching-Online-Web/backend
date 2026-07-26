@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { authService } from '../services/auth.service';
+import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export const authController = {
   async signUp(req: Request, res: Response): Promise<void> {
@@ -31,20 +32,41 @@ export const authController = {
     }
   },
 
-  async getProfile(req: Request, res: Response): Promise<void> {
+  async getProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      // Lấy token từ header Authorization (Bearer <token>)
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        res.status(401).json({ success: false, error: 'Thiếu token xác thực' });
+      const userId = req.user?.id;
+      if (!userId) {
+        // Fallback to token parse if middleware wasn't attached
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+          res.status(401).json({ success: false, error: 'Thiếu token xác thực' });
+          return;
+        }
+        const token = authHeader.split(' ')[1];
+        const profile = await authService.getProfile(token);
+        res.status(200).json({ success: true, data: profile });
         return;
       }
-      const token = authHeader.split(' ')[1];
 
-      const profile = await authService.getProfile(token);
+      const profile = await authService.getProfile(userId);
       res.status(200).json({ success: true, data: profile });
     } catch (error: any) {
       res.status(401).json({ success: false, error: error.message });
+    }
+  },
+
+  async updateProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      const updatedProfile = await authService.updateProfile(userId, req.body);
+      res.status(200).json({ success: true, message: 'Cập nhật hồ sơ thành công', data: updatedProfile });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || error });
     }
   }
 };

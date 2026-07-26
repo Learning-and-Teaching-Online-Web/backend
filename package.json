@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "export:excel": "tsx scripts/export-db-to-excel.ts"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,8 @@
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
     "@types/swagger-ui-express": "^4.1.8",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
     "prisma": "^7.8.0",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3"

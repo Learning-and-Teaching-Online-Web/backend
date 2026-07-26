@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { bookingController } from '../controllers/booking.controller';
-import { verifyAuth } from '../middlewares/auth.middleware';
+import { verifyAuth, requireRole } from '../middlewares/auth.middleware';
 
 const bookingRoutes = Router();
 
 // Apply authentication middleware globally for booking operations
 bookingRoutes.use(verifyAuth);
 
-bookingRoutes.post('/', bookingController.create);
-bookingRoutes.get('/my-bookings', bookingController.listMyBookings);
+// Only users with 'student' role can create bookings or list their student bookings
+bookingRoutes.post('/', requireRole('student'), bookingController.create);
+bookingRoutes.get('/my-bookings', requireRole('student'), bookingController.listMyBookings);
 
 export default bookingRoutes;

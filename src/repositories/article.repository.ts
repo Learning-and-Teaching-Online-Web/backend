@@ -17,7 +17,7 @@ export const articleRepository = {
     title: string;
     excerpt: string;
     content: any; // Json representing paragraphs
-    date: string;
+    published_at?: Date | string;
     author: string;
     commentsCount?: number;
     category: string;
@@ -25,7 +25,23 @@ export const articleRepository = {
     tags: any; // Json representing tags
   }) {
     return await prisma.article.create({
+      data: {
+        ...data,
+        published_at: data.published_at ? new Date(data.published_at) : new Date()
+      }
+    });
+  },
+
+  async update(id: string, data: any) {
+    return await prisma.article.update({
+      where: { id },
       data
+    });
+  },
+
+  async delete(id: string) {
+    return await prisma.article.delete({
+      where: { id }
     });
   },
 

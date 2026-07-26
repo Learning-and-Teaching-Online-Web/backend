@@ -88,6 +88,14 @@ export const adminRepository = {
     const [users, total] = await prisma.$transaction([
       prisma.user.findMany({
         where: whereClause,
+        include: {
+          student_profile: true,
+          tutor_profile: {
+            include: {
+              certificates: true
+            }
+          }
+        },
         orderBy: { created_at: 'desc' },
         skip,
         take: limit
@@ -165,10 +173,25 @@ export const adminRepository = {
   },
 
   async updateTutorVerificationStatus(tutorId: string, status: VerificationStatus) {
-    return await prisma.tutorProfile.update({
+    const profile = await prisma.tutorProfile.update({
       where: { tutor_id: tutorId },
       data: { verified_status: status }
     });
+
+    // Automatically update pending certificates matching the profile status
+    if (status === 'approved') {
+      await prisma.tutorCertificate.updateMany({
+        where: { tutor_id: tutorId, status: 'pending' },
+        data: { status: 'approved' }
+      });
+    } else if (status === 'rejected') {
+      await prisma.tutorCertificate.updateMany({
+        where: { tutor_id: tutorId, status: 'pending' },
+        data: { status: 'rejected' }
+      });
+    }
+
+    return profile;
   },
 
   async getTutorCertificates(tutorId: string) {
@@ -209,12 +232,16 @@ export const adminRepository = {
       prisma.course.findMany({
         where: whereClause,
         include: {
+          documents: {
+            orderBy: { created_at: 'asc' }
+          },
           tutor: {
             include: {
               user: {
                 select: {
                   full_name: true,
-                  email: true
+                  email: true,
+                  avatar_url: true
                 }
               }
             }

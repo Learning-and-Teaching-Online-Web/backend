@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { supabaseAdmin } from '../config/supabase';
 
 export const tutorRepository = {
 
@@ -307,5 +308,198 @@ export const tutorRepository = {
     });
 
     return payout;
+  },
+
+  // Get tutor profile with certificates
+  async getMyProfile(userId: string) {
+    let profile = await prisma.tutorProfile.findUnique({
+      where: { user_id: userId },
+      include: {
+        certificates: {
+          orderBy: { created_at: 'desc' }
+        },
+        user: {
+          select: {
+            full_name: true,
+            email: true,
+            phone: true,
+            avatar_url: true,
+            bio: true
+          }
+        }
+      }
+    });
+
+    if (!profile) {
+      // Auto-create tutor profile if missing for tutor role
+      profile = await prisma.tutorProfile.create({
+        data: {
+          user_id: userId,
+          verified_status: 'pending'
+        },
+        include: {
+          certificates: {
+            orderBy: { created_at: 'desc' }
+          },
+          user: {
+            select: {
+              full_name: true,
+              email: true,
+              phone: true,
+              avatar_url: true,
+              bio: true
+            }
+          }
+        }
+      });
+    }
+
+    return profile;
+  },
+
+  // Update tutor profile fields
+  async updateMyProfile(userId: string, data: {
+    bio?: string;
+    education?: string;
+    experience_years?: number;
+    hourly_rate?: number;
+    specialties?: any;
+    teaching_mode?: any;
+    province?: string;
+    district?: string;
+  }) {
+    const tutor = await this.getMyProfile(userId);
+
+    const updatedProfile = await prisma.tutorProfile.update({
+      where: { tutor_id: tutor.tutor_id },
+      data: {
+        bio: data.bio !== undefined ? data.bio : tutor.bio,
+        education: data.education !== undefined ? data.education : tutor.education,
+        experience_years: data.experience_years !== undefined ? Number(data.experience_years) : tutor.experience_years,
+        hourly_rate: data.hourly_rate !== undefined ? Number(data.hourly_rate) : tutor.hourly_rate,
+        specialties: data.specialties !== undefined ? data.specialties : tutor.specialties,
+        teaching_mode: data.teaching_mode !== undefined ? data.teaching_mode : tutor.teaching_mode,
+        province: data.province !== undefined ? data.province : tutor.province,
+        district: data.district !== undefined ? data.district : tutor.district
+      },
+      include: {
+        certificates: {
+          orderBy: { created_at: 'desc' }
+        },
+        user: {
+          select: {
+            full_name: true,
+            email: true,
+            phone: true,
+            avatar_url: true,
+            bio: true
+          }
+        }
+      }
+    });
+
+    if (data.bio) {
+      await prisma.user.update({
+        where: { user_id: userId },
+        data: { bio: data.bio }
+      });
+    }
+
+    return updatedProfile;
+  },
+
+  // Add new certificate for tutor
+  async addCertificate(tutorId: string, data: {
+    title: string;
+    file_url?: string;
+    file_base64?: string;
+    file_name?: string;
+    file_type?: string;
+    issued_by?: string;
+    issued_date?: string;
+    expiry_date?: string;
+  }) {
+    let finalFileUrl = data.file_url || '';
+
+    // Upload base64 file to Supabase Storage bucket 'certificates' if base64 provided
+    if (data.file_base64) {
+      try {
+        // Ensure 'certificates' bucket exists
+        try {
+          await supabaseAdmin.storage.createBucket('certificates', { public: true });
+        } catch (_) {
+          // Ignore if bucket already exists
+        }
+
+        // Parse base64 string
+        let base64Data = data.file_base64;
+        let contentType = 'application/pdf';
+
+        if (base64Data.includes(';base64,')) {
+          const parts = base64Data.split(';base64,');
+          contentType = parts[0].replace('data:', '') || 'application/pdf';
+          base64Data = parts[1];
+        }
+
+        const buffer = Buffer.from(base64Data, 'base64');
+        const rawFileName = data.file_name || `cert_${Date.now()}.pdf`;
+        const cleanFileName = rawFileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = `${tutorId}/${Date.now()}_${cleanFileName}`;
+
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from('certificates')
+          .upload(storagePath, buffer, {
+            contentType,
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error('Error uploading certificate to Supabase Storage:', uploadError);
+          throw new Error(`Tải file lên Supabase Storage thất bại: ${uploadError.message}`);
+        }
+
+        const { data: urlData } = supabaseAdmin.storage
+          .from('certificates')
+          .getPublicUrl(storagePath);
+
+        finalFileUrl = urlData.publicUrl;
+      } catch (err: any) {
+        console.error('Supabase storage process error:', err);
+        throw new Error(err.message || 'Lỗi xử lý file chứng chỉ');
+      }
+    }
+
+    if (!finalFileUrl) {
+      throw new Error('Vui lòng chọn tệp chứng chỉ để tải lên.');
+    }
+
+    const cert = await prisma.tutorCertificate.create({
+      data: {
+        tutor_id: tutorId,
+        title: data.title,
+        file_url: finalFileUrl,
+        file_type: data.file_type || 'PDF',
+        issued_by: data.issued_by || null,
+        issued_date: data.issued_date ? new Date(data.issued_date) : null,
+        expiry_date: data.expiry_date ? new Date(data.expiry_date) : null,
+        status: 'pending'
+      }
+    });
+
+    return cert;
+  },
+
+  // Delete certificate
+  async deleteCertificate(tutorId: string, certId: string) {
+    const cert = await prisma.tutorCertificate.findFirst({
+      where: { cert_id: certId, tutor_id: tutorId }
+    });
+    if (!cert) throw new Error('Không tìm thấy bằng cấp/chứng chỉ này');
+
+    await prisma.tutorCertificate.delete({
+      where: { cert_id: certId }
+    });
+
+    return true;
   }
 };

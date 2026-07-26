@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -12,10 +12,32 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 
-export const prisma = new PrismaClient({ adapter });
+// 1. Fix Decimal JSON Serialization for Express API responses
+(Prisma.Decimal.prototype as any).toJSON = function () {
+  const num = Number(this.toString());
+  return Number.isNaN(num) ? this.toString() : num;
+};
+
+const basePrisma = new PrismaClient({ adapter });
+
+// 2. Prisma Extension: Automatic Soft Delete filtering on User model queries
+export const prisma = basePrisma.$extends({
+  query: {
+    user: {
+      async findMany({ args, query }) {
+        args.where = { status: { not: "deleted" }, ...args.where };
+        return query(args);
+      },
+      async findFirst({ args, query }) {
+        args.where = { status: { not: "deleted" }, ...args.where };
+        return query(args);
+      },
+    },
+  },
+});
 
 // Handle graceful shutdown
 process.on("beforeExit", async () => {
-  await prisma.$disconnect();
+  await basePrisma.$disconnect();
   await pool.end();
 });

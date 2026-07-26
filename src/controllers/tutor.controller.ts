@@ -199,6 +199,81 @@ export const tutorController = {
       console.error('Error in withdrawFunds controller:', error);
       res.status(400).json({ success: false, error: error.message || error });
     }
+  },
+
+  // Get logged-in tutor profile + certificates
+  async getMyProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const data = await tutorService.getMyProfile(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error in getMyProfile controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Update tutor profile
+  async updateMyProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const data = await tutorService.updateMyProfile(userId, req.body);
+      res.status(200).json({ success: true, message: 'Cập nhật hồ sơ thành công', data });
+    } catch (error: any) {
+      console.error('Error in updateMyProfile controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Add new certificate
+  async addCertificate(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { title, file_url, file_base64 } = req.body;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      if (!title || (!file_url && !file_base64)) {
+        res.status(400).json({ success: false, error: 'Vui lòng nhập Tên chứng chỉ và chọn tệp minh chứng' });
+        return;
+      }
+
+      const data = await tutorService.addCertificate(userId, req.body);
+      res.status(201).json({ success: true, message: 'Gửi chứng chỉ mới thành công', data });
+    } catch (error: any) {
+      console.error('Error in addCertificate controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Delete certificate
+  async deleteCertificate(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const certId = req.params.certId as string;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      await tutorService.deleteCertificate(userId, certId);
+      res.status(200).json({ success: true, message: 'Xóa chứng chỉ thành công' });
+    } catch (error: any) {
+      console.error('Error in deleteCertificate controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
   }
 };
 
