@@ -33,8 +33,9 @@ enum UserStatus {
 // Quan hệ: 1 User có 1 TutorProfile HOẶC 1 StudentProfile (tùy role).
 // ================================================================
 model User {
-  user_id         String     @id @db.Uuid // Khóa chính UUID (mỗi user có 1 mã định danh duy nhất)
-  email           String     @unique @db.Citext // Email đăng nhập, @unique chống trùng, @db.Citext không phân biệt hoa/thường (VD: A@g.com = a@g.com)
+  user_id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
+  email           String     @unique @db.Citext // Email đăng nhập
+  password        String?    // Mật khẩu người dùng (đã được mã hóa bcrypt)
   full_name       String     // Họ và tên đầy đủ của người dùng
   phone           String?    // Số điện thoại liên hệ (tùy chọn)
   avatar_url      String?    // Đường dẫn ảnh đại diện (lưu trên CDN/Cloud Storage)
@@ -43,12 +44,12 @@ model User {
   bio             String?    // Tiểu sử/Giới thiệu ngắn về bản thân
   role            UserRole   @default(student) // Phân quyền (mặc định là học sinh khi đăng ký)
   status          UserStatus @default(active) // Trạng thái tài khoản (mặc định active)
-  email_verified  Boolean    @default(false) // Trạng thái xác thực email (Nodemailer gửi link → click → true)
+  email_verified  Boolean    @default(false) // Trạng thái xác thực email
   social_provider String?    // Nhà cung cấp đăng nhập MXH (Google, Facebook...) nếu có
   social_id       String?    // ID duy nhất từ Google/Facebook trả về
-  created_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản (có kèm múi giờ)
+  created_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản
   updated_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
-  last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng (dùng để thống kê active user)
+  last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
 
   // Relations
   tutor_profile      TutorProfile?
@@ -67,10 +68,28 @@ model User {
   transactions       Transaction[]
   article_comments   ArticleComment[]
   course_comments    CourseComment[]
+  refresh_tokens     RefreshToken[]
 
   @@index([role, status], map: "idx_users_role_status")
   @@index([social_provider, social_id], map: "idx_users_social")
   @@map("users")
+}
+
+// ================================================================
+// BẢNG: refresh_tokens
+// Mô tả: Lưu trữ Refresh Token của người dùng phục vụ gia hạn phiên đăng nhập JWT
+// ================================================================
+model RefreshToken {
+  token_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  token      String   @unique
+  expires_at DateTime @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_refresh_tokens_user")
+  @@map("refresh_tokens")
 }
 
 // ================================================================
