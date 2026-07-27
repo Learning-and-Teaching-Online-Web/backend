@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { articleController } from '../controllers/article.controller';
 import { articleCommentController } from '../controllers/articleComment.controller';
-import { verifyAuth, requireRole } from '../middlewares/auth.middleware';
+import { verifyAuth, requireRole, requireApprovedTutor } from '../middlewares/auth.middleware';
 
 const articleRoutes = Router();
 
@@ -14,9 +14,9 @@ articleRoutes.get('/:articleId/comments', articleCommentController.getByArticle)
 articleRoutes.post('/:articleId/comments', verifyAuth, articleCommentController.create);
 articleRoutes.delete('/comments/:commentId', verifyAuth, articleCommentController.delete);
 
-// Protected routes for Admin and Tutor to manage articles
-articleRoutes.post('/', verifyAuth, requireRole('admin', 'tutor'), articleController.create);
-articleRoutes.put('/:id', verifyAuth, requireRole('admin', 'tutor'), articleController.update);
-articleRoutes.delete('/:id', verifyAuth, requireRole('admin', 'tutor'), articleController.delete);
+// Protected routes for Admin and Approved Tutor to manage articles
+articleRoutes.post('/', verifyAuth, requireApprovedTutor, articleController.create);
+articleRoutes.put('/:id', verifyAuth, requireApprovedTutor, articleController.update);
+articleRoutes.delete('/:id', verifyAuth, requireApprovedTutor, articleController.delete);
 
 export default articleRoutes;

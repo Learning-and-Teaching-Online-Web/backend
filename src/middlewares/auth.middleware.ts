@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { createUserClient } from '../config/supabase';
+import { prisma } from '../config/prisma';
 
 export interface AuthenticatedRequest extends Request {
   user?: any;
@@ -55,3 +56,43 @@ export const requireRole = (...roles: string[]) => {
     next();
   };
 };
+
+export const requireApprovedTutor = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  if (!authReq.user) {
+    res.status(401).json({ success: false, error: 'Unauthorized: User not authenticated' });
+    return;
+  }
+
+  const userRole = authReq.user.user_metadata?.role || authReq.user.role;
+
+  // Admin is always allowed
+  if (userRole === 'admin') {
+    return next();
+  }
+
+  if (userRole !== 'tutor') {
+    res.status(403).json({ success: false, error: 'Forbidden: Yêu cầu quyền Gia sư hoặc Admin' });
+    return;
+  }
+
+  try {
+    const profile = await prisma.tutorProfile.findUnique({
+      where: { user_id: authReq.user.id }
+    });
+
+    if (!profile || profile.verified_status !== 'approved') {
+      res.status(403).json({
+        success: false,
+        error: 'Forbidden: Hồ sơ gia sư của bạn chưa được duyệt bởi Quản trị viên'
+      });
+      return;
+    }
+
+    next();
+  } catch (err: any) {
+    console.error('Error in requireApprovedTutor middleware:', err);
+    res.status(500).json({ success: false, error: 'Internal server error while checking tutor verification status' });
+  }
+};
+
