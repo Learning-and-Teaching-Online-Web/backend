@@ -37,6 +37,66 @@ export const courseCommentController = {
 
       const parsedRating = rating ? parseInt(rating, 10) : undefined;
 
+      const { prisma } = require('../config/prisma');
+      const userRole = req.user?.user_metadata?.role || req.user?.role;
+
+      // Regular users (Students) must meet enrollment & completion criteria
+      if (userRole !== 'admin') {
+        const course = await prisma.course.findUnique({
+          where: { course_id: courseId }
+        });
+
+        if (!course) {
+          res.status(404).json({ success: false, error: 'Không tìm thấy khóa học.' });
+          return;
+        }
+
+        const studentProfile = await prisma.studentProfile.findUnique({
+          where: { user_id: userId }
+        });
+
+        if (!studentProfile) {
+          res.status(403).json({ success: false, error: 'Tài khoản của bạn cần là Học sinh để bình luận & đánh giá khóa học.' });
+          return;
+        }
+
+        const booking = await prisma.booking.findFirst({
+          where: {
+            student_id: studentProfile.student_id,
+            course_id: courseId
+          },
+          orderBy: { created_at: 'desc' }
+        });
+
+        if (!booking) {
+          res.status(403).json({
+            success: false,
+            error: 'Bạn chưa mua khóa học này nên chưa thể gửi bình luận & đánh giá.'
+          });
+          return;
+        }
+
+        const isPaid = booking.payment_status === 'paid' || booking.status === 'confirmed' || booking.status === 'completed';
+
+        if (course.type === 'online') {
+          if (booking.status !== 'completed') {
+            res.status(403).json({
+              success: false,
+              error: 'Khóa học Online cần phải kết thúc toàn bộ khóa học (trạng thái Hoàn thành) mới có thể gửi bình luận & đánh giá.'
+            });
+            return;
+          }
+        } else if (course.type === 'offline') {
+          if (!isPaid) {
+            res.status(403).json({
+              success: false,
+              error: 'Bạn cần mua/thanh toán khóa học Offline thành công mới có thể gửi bình luận & đánh giá.'
+            });
+            return;
+          }
+        }
+      }
+
       const newComment = await courseCommentRepository.create({
         course_id: courseId,
         user_id: userId,
