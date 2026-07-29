@@ -14,6 +14,10 @@ export const courseService = {
       subject,
       description,
       price,
+      type,
+      start_date,
+      end_date,
+      duration_months,
       duration_minutes,
       max_students,
       total_sessions,
@@ -32,9 +36,6 @@ export const courseService = {
     if (duration_minutes && Number(duration_minutes) <= 0) {
       throw new Error('Thời lượng buổi học phải lớn hơn 0');
     }
-    if (total_sessions && Number(total_sessions) <= 0) {
-      throw new Error('Tổng số buổi học phải lớn hơn 0');
-    }
 
     const payload = {
       tutor_id: tutor.tutor_id,
@@ -42,6 +43,10 @@ export const courseService = {
       subject,
       description,
       price: Number(price),
+      type: type || 'online',
+      start_date: start_date ? new Date(start_date) : null,
+      end_date: end_date ? new Date(end_date) : null,
+      duration_months: duration_months ? Number(duration_months) : null,
       duration_minutes: Number(duration_minutes) || 60,
       max_students: Number(max_students) || 1,
       total_sessions: Number(total_sessions) || 1,
@@ -72,8 +77,9 @@ export const courseService = {
     // Filter fields to update
     const updatePayload: any = {};
     const allowedFields = [
-      'title', 'subject', 'description', 'price', 'duration_minutes',
-      'max_students', 'total_sessions', 'level', 'status', 'thumbnail_url', 'tags'
+      'title', 'subject', 'description', 'price', 'type', 'start_date', 'end_date',
+      'duration_months', 'duration_minutes', 'max_students', 'total_sessions',
+      'level', 'status', 'thumbnail_url', 'tags'
     ];
 
     allowedFields.forEach(field => {
@@ -81,7 +87,13 @@ export const courseService = {
         if (field === 'price' && Number(courseData[field]) < 0) {
           throw new Error('Giá tiền không được nhỏ hơn 0');
         }
-        updatePayload[field] = courseData[field];
+        if (['start_date', 'end_date'].includes(field)) {
+          updatePayload[field] = courseData[field] ? new Date(courseData[field]) : null;
+        } else if (['duration_months', 'duration_minutes', 'max_students', 'total_sessions'].includes(field)) {
+          updatePayload[field] = courseData[field] ? Number(courseData[field]) : null;
+        } else {
+          updatePayload[field] = courseData[field];
+        }
       }
     });
 
@@ -165,17 +177,66 @@ export const courseService = {
     return await courseRepository.addSchedule(payload);
   },
 
+  // CourseLesson methods
+  async addLesson(userId: string, courseId: string, lessonData: any) {
+    const tutor = await tutorRepository.findByUserId(userId);
+    if (!tutor) throw new Error('Hồ sơ gia sư không tồn tại');
+
+    const course = await courseRepository.findById(courseId);
+    if (!course) throw new Error('Không tìm thấy khóa học');
+    if (course.tutor_id !== tutor.tutor_id) throw new Error('Bạn không có quyền quản lý bài học cho khóa học này');
+
+    if (!lessonData.title || !lessonData.video_url) {
+      throw new Error('Tiêu đề bài học và đường dẫn video là bắt buộc');
+    }
+
+    return await courseRepository.addLesson({
+      course_id: courseId,
+      title: lessonData.title,
+      description: lessonData.description,
+      video_url: lessonData.video_url,
+      order_index: lessonData.order_index ? Number(lessonData.order_index) : undefined
+    });
+  },
+
+  async updateLesson(userId: string, courseId: string, lessonId: string, lessonData: any) {
+    const tutor = await tutorRepository.findByUserId(userId);
+    if (!tutor) throw new Error('Hồ sơ gia sư không tồn tại');
+
+    const course = await courseRepository.findById(courseId);
+    if (!course) throw new Error('Không tìm thấy khóa học');
+    if (course.tutor_id !== tutor.tutor_id) throw new Error('Bạn không có quyền sửa bài học này');
+
+    return await courseRepository.updateLesson(lessonId, {
+      title: lessonData.title,
+      description: lessonData.description,
+      video_url: lessonData.video_url,
+      order_index: lessonData.order_index ? Number(lessonData.order_index) : undefined
+    });
+  },
+
+  async deleteLesson(userId: string, courseId: string, lessonId: string) {
+    const tutor = await tutorRepository.findByUserId(userId);
+    if (!tutor) throw new Error('Hồ sơ gia sư không tồn tại');
+
+    const course = await courseRepository.findById(courseId);
+    if (!course) throw new Error('Không tìm thấy khóa học');
+    if (course.tutor_id !== tutor.tutor_id) throw new Error('Bạn không có quyền xóa bài học này');
+
+    return await courseRepository.deleteLesson(lessonId);
+  },
 
   // List all courses with filtering
   async listCourses(query: any) {
     const filters = {
+      type: query.type,
       subject: query.subject,
       level: query.level,
       min_price: query.min_price ? Number(query.min_price) : undefined,
       max_price: query.max_price ? Number(query.max_price) : undefined,
       tutor_id: query.tutor_id,
-      status: 'published', // Force published for public API
-      is_public_api: true, // Filter only approved tutors and active users
+      status: 'published',
+      is_public_api: true,
       search: query.search,
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 10
@@ -185,7 +246,7 @@ export const courseService = {
     return { data, total: count, page: filters.page, limit: filters.limit };
   },
 
-  // List courses for a specific tutor (tutor view)
+  // List courses for a specific tutor
   async listMyCourses(userId: string, query: any) {
     const tutor = await tutorRepository.findByUserId(userId);
     if (!tutor) {
@@ -193,12 +254,13 @@ export const courseService = {
     }
 
     const filters = {
+      type: query.type,
       subject: query.subject,
       level: query.level,
       min_price: query.min_price ? Number(query.min_price) : undefined,
       max_price: query.max_price ? Number(query.max_price) : undefined,
-      tutor_id: tutor.tutor_id, // Force tutor_id to current tutor
-      status: query.status, // Allow filtering by any status
+      tutor_id: tutor.tutor_id,
+      status: query.status,
       search: query.search,
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 10
@@ -211,12 +273,6 @@ export const courseService = {
 
   // Get detailed course by id
   async getCourseDetail(courseId: string) {
-    try {
-      const course = await courseRepository.findById(courseId);
-      if (!course) return null;
-      return course;
-    } catch (err: any) {
-      throw err;
-    }
+    return await courseRepository.findById(courseId);
   }
 };

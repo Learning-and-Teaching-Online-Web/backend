@@ -77,6 +77,65 @@ export const courseController = {
     }
   },
 
+  // Add lesson to a course
+  async addLesson(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const courseId = req.params.id as string;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      const result = await courseService.addLesson(userId, courseId, req.body);
+      res.status(201).json({ success: true, message: 'Thêm bài giảng video thành công', data: result });
+    } catch (error: any) {
+      console.error('Error in addLesson controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Update a lesson in a course
+  async updateLesson(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const courseId = req.params.id as string;
+      const lessonId = req.params.lessonId as string;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      const result = await courseService.updateLesson(userId, courseId, lessonId, req.body);
+      res.status(200).json({ success: true, message: 'Cập nhật bài giảng video thành công', data: result });
+    } catch (error: any) {
+      console.error('Error in updateLesson controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
+  // Delete a lesson from a course
+  async deleteLesson(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const courseId = req.params.id as string;
+      const lessonId = req.params.lessonId as string;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      const result = await courseService.deleteLesson(userId, courseId, lessonId);
+      res.status(200).json({ success: true, message: 'Xóa bài giảng video thành công', data: result });
+    } catch (error: any) {
+      console.error('Error in deleteLesson controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
   // Get list of courses with filtering (public view)
   async list(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {

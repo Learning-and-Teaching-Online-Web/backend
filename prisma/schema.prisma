@@ -253,6 +253,12 @@ model TutorCertificate {
 // MODULE 3: COURSE & SCHEDULE (Khóa học & Lịch giảng dạy)
 // ================================================================
 
+// Phân loại hình thức khóa học
+enum CourseType {
+  online  // Học trực tuyến Live với Gia sư theo Lịch trình
+  offline // Học qua Video bài giảng có sẵn
+}
+
 // Trạng thái hiển thị / phát hành của khóa học
 enum CourseStatus {
   draft     // Bản nháp: Gia sư đang tạo, chưa mở đăng ký cho học sinh thấy
@@ -264,7 +270,7 @@ enum CourseStatus {
 // ================================================================
 // BẢNG: courses
 // Mô tả: Quản lý thông tin các khóa học do Gia sư tạo ra.
-// Luồng: Gia sư tạo draft -> thêm lịch học -> chuyển sang published -> Học sinh chọn đặt lịch.
+// Luồng: Gia sư tạo draft -> chọn loại (online/offline) -> thêm lịch học hoặc video -> published.
 // ================================================================
 model Course {
   course_id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho khóa học
@@ -273,6 +279,10 @@ model Course {
   subject          String       // Môn học chính (VD: "Toán", "Vật Lý", "Tiếng Anh") - dùng để tìm kiếm & lọc
   description      String?      // Mô tả nội dung, mục tiêu kiến thức & phương pháp giảng dạy
   price            Decimal      @db.Decimal(10, 2) // Học phí trọn gói khóa học (dùng Decimal tránh sai số tiền tệ)
+  type             CourseType   @default(online) // Loại khóa học (online: live trực tuyến theo lịch trình, offline: video bài giảng có sẵn)
+  start_date       DateTime?    @db.Date // Ngày bắt đầu / khai giảng khóa Online
+  end_date         DateTime?    @db.Date // Ngày kết thúc / bế giảng khóa Online
+  duration_months  Int?         @db.SmallInt // Thời gian khóa học tính theo tháng (VD: 3 tháng)
   duration_minutes Int          @default(60) @db.SmallInt // Thời lượng mỗi buổi học tính bằng phút (VD: 60, 90, 120)
   max_students     Int          @default(1) @db.SmallInt // Số học sinh tối đa trong 1 lớp (1 = dạy 1-1, >1 = dạy nhóm)
   total_sessions   Int          @default(1) @db.SmallInt // Tổng số buổi học trong toàn bộ khóa (VD: 10 buổi, 20 buổi)
@@ -286,6 +296,7 @@ model Course {
   // Relations
   tutor            TutorProfile     @relation(fields: [tutor_id], references: [tutor_id], onDelete: Cascade)
   schedules        CourseSchedule[]
+  lessons          CourseLesson[]
   bookings         Booking[]
   documents        Document[]
   ai_conversations AIConversation[]
@@ -294,10 +305,33 @@ model Course {
 
   @@index([tutor_id, status], map: "idx_courses_tutor")
   @@index([subject, status, price], map: "idx_courses_subject")
+  @@index([type, status], map: "idx_courses_type_status")
   @@index([status, created_at(sort: Desc)], map: "idx_courses_status")
   @@index([tags], type: Gin, map: "idx_courses_tags")
   @@map("courses")
 }
+
+// ================================================================
+// BẢNG: course_lessons
+// Mô tả: Quản lý danh sách các bài giảng Video cho khóa học Offline (hoặc video bổ trợ).
+// Quan hệ: Liên kết 1-N với courses (course_id).
+// ================================================================
+model CourseLesson {
+  lesson_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài học
+  course_id   String   @db.Uuid // Khóa ngoại liên kết tới courses.course_id
+  title       String   // Tên tiêu đề bài giảng / bài học
+  description String?  // Mô tả ngắn gọn nội dung bài học
+  video_url   String   // Đường dẫn xem Video bài giảng (lưu trên Cloud Storage / CDN)
+  order_index Int      @default(1) // Thứ tự sắp xếp bài học trong khóa (1, 2, 3...)
+  created_at  DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bài học
+  updated_at  DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật bài học gần nhất
+
+  course Course @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+
+  @@index([course_id, order_index], map: "idx_lessons_course_order")
+  @@map("course_lessons")
+}
+
 
 // ================================================================
 // BẢNG: course_schedules
@@ -376,7 +410,7 @@ model Booking {
   booking_id       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho đơn đặt lịch
   student_id       String        @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id
   course_id        String        @db.Uuid // Khóa ngoại liên kết tới courses.course_id
-  schedule_id      String        @db.Uuid // Khóa ngoại liên kết tới course_schedules.schedule_id (khung giờ được chọn)
+  schedule_id      String?       @db.Uuid // Khóa ngoại tùy chọn liên kết tới course_schedules.schedule_id (nếu đăng ký khung giờ riêng)
   status           BookingStatus @default(pending) // Trạng thái tiến độ booking (pending -> confirmed -> completed)
   payment_status   PaymentStatus @default(unpaid) // Trạng thái thanh toán tiền (unpaid -> paid)
   total_amount     Decimal       @db.Decimal(10, 2) // Tổng tiền học phí cần thanh toán (VND)
@@ -389,10 +423,11 @@ model Booking {
   updated_at       DateTime      @default(now()) @db.Timestamptz // Thời điểm cập nhật trạng thái mới nhất
 
   // Relations
-  student         StudentProfile @relation(fields: [student_id], references: [student_id])
-  course          Course         @relation(fields: [course_id], references: [course_id])
-  schedule        CourseSchedule @relation(fields: [schedule_id], references: [schedule_id])
-  cancelledByUser User?          @relation(fields: [cancelled_by], references: [user_id], onDelete: SetNull)
+  student         StudentProfile  @relation(fields: [student_id], references: [student_id])
+  course          Course          @relation(fields: [course_id], references: [course_id])
+  schedule        CourseSchedule? @relation(fields: [schedule_id], references: [schedule_id])
+  cancelledByUser User?           @relation(fields: [cancelled_by], references: [user_id], onDelete: SetNull)
+
   transactions    Transaction[]
   class_sessions  ClassSession[]
   chat_rooms      ChatRoom[]

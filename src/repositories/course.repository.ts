@@ -10,9 +10,9 @@ function formatCourseUser(course: any) {
 }
 
 export const courseRepository = {
-  // Find course details including tutor, schedules, documents, and quizzes
+  // Find course details including tutor, schedules, lessons, documents, and quizzes
   async findById(courseId: string) {
-    const data = await prisma.course.findUnique({
+    const data = await (prisma.course as any).findUnique({
       where: { course_id: courseId },
       include: {
         tutor: {
@@ -26,7 +26,12 @@ export const courseRepository = {
             }
           }
         },
-        schedules: true,
+        schedules: {
+          orderBy: { start_time: 'asc' }
+        },
+        lessons: {
+          orderBy: { order_index: 'asc' }
+        },
         documents: {
           orderBy: { created_at: 'asc' }
         },
@@ -49,13 +54,14 @@ export const courseRepository = {
     };
   },
 
-  // Find all courses with pagination and filter support
+  // Find all courses with pagination and filter support (including type: online | offline)
   async findAll(filters: any) {
     const page = parseInt(filters.page) || 1;
     const limit = parseInt(filters.limit) || 10;
     const skip = (page - 1) * limit;
     const whereClause: any = {};
 
+    if (filters.type) whereClause.type = filters.type;
     if (filters.subject) whereClause.subject = filters.subject;
     if (filters.level) whereClause.level = filters.level;
     if (filters.min_price) whereClause.price = { ...whereClause.price, gte: parseFloat(filters.min_price) };
@@ -77,8 +83,8 @@ export const courseRepository = {
       ];
     }
 
-    const [data, count] = await prisma.$transaction([
-      prisma.course.findMany({
+    const [data, count] = await (prisma as any).$transaction([
+      (prisma.course as any).findMany({
         where: whereClause,
         include: {
           tutor: {
@@ -92,7 +98,12 @@ export const courseRepository = {
               }
             },
           },
-          schedules: true,
+          schedules: {
+            orderBy: { start_time: 'asc' }
+          },
+          lessons: {
+            orderBy: { order_index: 'asc' }
+          },
           documents: {
             orderBy: { created_at: 'asc' }
           },
@@ -106,10 +117,10 @@ export const courseRepository = {
         take: limit
 
       }),
-      prisma.course.count({ where: whereClause })
+      (prisma.course as any).count({ where: whereClause })
     ]);
 
-    const mappedData = data.map(course => {
+    const mappedData = data.map((course: any) => {
       const formatted = formatCourseUser(course);
       const uniqueStudents = new Set(formatted.bookings?.map((b: any) => b.student_id));
       return {
@@ -122,9 +133,9 @@ export const courseRepository = {
     return { data: mappedData, count };
   },
 
-  // Insert a new course
+  // Insert a new course (with type, start_date, end_date, duration_months)
   async insert(courseData: any) {
-    const data = await prisma.course.create({
+    const data = await (prisma.course as any).create({
       data: courseData
     });
 
@@ -133,7 +144,7 @@ export const courseRepository = {
 
   // Update an existing course
   async update(courseId: string, courseData: any) {
-    const data = await prisma.course.update({
+    const data = await (prisma.course as any).update({
       where: { course_id: courseId },
       data: courseData
     });
@@ -141,10 +152,9 @@ export const courseRepository = {
     return data;
   },
 
-  // Delete a course (e.g. by setting status to archived or deleting it)
+  // Delete a course (soft delete: status = 'archived')
   async delete(courseId: string) {
-    // Soft delete: update status to 'archived'
-    const data = await prisma.course.update({
+    const data = await (prisma.course as any).update({
       where: { course_id: courseId },
       data: { status: 'archived' }
     });
@@ -154,7 +164,7 @@ export const courseRepository = {
 
   // Add schedule to a course
   async addSchedule(scheduleData: any) {
-    const data = await prisma.courseSchedule.create({
+    const data = await (prisma.courseSchedule as any).create({
       data: scheduleData
     });
 
@@ -163,7 +173,7 @@ export const courseRepository = {
 
   // Find existing schedules to prevent overlap
   async findOverlappingSchedules(tutorId: string, startTime: string, endTime: string) {
-    const overlaps = await prisma.courseSchedule.findMany({
+    const overlaps = await (prisma.courseSchedule as any).findMany({
       where: {
         course: { tutor_id: tutorId },
         OR: [
@@ -178,5 +188,42 @@ export const courseRepository = {
     });
 
     return overlaps;
+  },
+
+  // CourseLesson CRUD
+  async addLesson(lessonData: { course_id: string; title: string; description?: string; video_url: string; order_index?: number }) {
+    const count = await (prisma.courseLesson as any).count({
+      where: { course_id: lessonData.course_id }
+    });
+
+    return await (prisma.courseLesson as any).create({
+      data: {
+        course_id: lessonData.course_id,
+        title: lessonData.title,
+        description: lessonData.description || null,
+        video_url: lessonData.video_url,
+        order_index: lessonData.order_index || (count + 1)
+      }
+    });
+  },
+
+  async getLessonsByCourseId(courseId: string) {
+    return await (prisma.courseLesson as any).findMany({
+      where: { course_id: courseId },
+      orderBy: { order_index: 'asc' }
+    });
+  },
+
+  async updateLesson(lessonId: string, lessonData: { title?: string; description?: string; video_url?: string; order_index?: number }) {
+    return await (prisma.courseLesson as any).update({
+      where: { lesson_id: lessonId },
+      data: lessonData
+    });
+  },
+
+  async deleteLesson(lessonId: string) {
+    return await (prisma.courseLesson as any).delete({
+      where: { lesson_id: lessonId }
+    });
   }
 };

@@ -186,10 +186,12 @@ export const tutorRepository = {
 
     // If confirmed, make sure schedule is booked and update tutor wallet balance
     if (status === 'confirmed') {
-      await prisma.courseSchedule.update({
-        where: { schedule_id: booking.schedule_id },
-        data: { is_booked: true }
-      });
+      if (booking.schedule_id) {
+        await prisma.courseSchedule.update({
+          where: { schedule_id: booking.schedule_id },
+          data: { is_booked: true }
+        });
+      }
 
       // Credit wallet of tutor (fetch tutor user_id first)
       const tutor = await prisma.tutorProfile.findUnique({
@@ -219,11 +221,14 @@ export const tutorRepository = {
         });
       }
     } else if (status === 'cancelled') {
-      await prisma.courseSchedule.update({
-        where: { schedule_id: booking.schedule_id },
-        data: { is_booked: false }
-      });
+      if (booking.schedule_id) {
+        await prisma.courseSchedule.update({
+          where: { schedule_id: booking.schedule_id },
+          data: { is_booked: false }
+        });
+      }
     }
+
 
     return updatedBooking;
   },

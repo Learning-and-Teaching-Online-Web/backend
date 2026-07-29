@@ -17,11 +17,16 @@ courseRoutes.get('/:courseId/comments', courseCommentController.getByCourse);
 courseRoutes.post('/:courseId/comments', verifyAuth, courseCommentController.create);
 courseRoutes.delete('/comments/:commentId', verifyAuth, courseCommentController.delete);
 
-// Document/Lesson routes
+// Document routes
 courseRoutes.get('/:courseId/documents', documentController.getByCourse);
 courseRoutes.post('/:courseId/documents', verifyAuth, requireApprovedTutor, documentController.create);
 courseRoutes.patch('/documents/:docId', verifyAuth, requireApprovedTutor, documentController.update);
 courseRoutes.delete('/documents/:docId', verifyAuth, requireApprovedTutor, documentController.delete);
+
+// Lesson routes (CourseLesson video lectures for Offline courses)
+courseRoutes.post('/:id/lessons', verifyAuth, requireApprovedTutor, courseController.addLesson);
+courseRoutes.patch('/:id/lessons/:lessonId', verifyAuth, requireApprovedTutor, courseController.updateLesson);
+courseRoutes.delete('/:id/lessons/:lessonId', verifyAuth, requireApprovedTutor, courseController.deleteLesson);
 
 courseRoutes.get('/:id', courseController.detail);
 
@@ -34,4 +39,3 @@ courseRoutes.delete('/:id', verifyAuth, requireApprovedTutor, courseController.d
 courseRoutes.post('/:id/schedules', verifyAuth, requireApprovedTutor, courseController.addSchedule);
 
 export default courseRoutes;
-
