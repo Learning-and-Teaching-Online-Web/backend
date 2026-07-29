@@ -1,11 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { createUserClient } from '../config/supabase';
 import { prisma } from '../config/prisma';
+import { jwtUtil } from '../utils/jwt.util';
 
 export interface AuthenticatedRequest extends Request {
-  user?: any;
-  supabase?: SupabaseClient;
+  user?: {
+    id: string;
+    userId: string;
+    user_id: string;
+    email: string;
+    role: string;
+    user_metadata?: {
+      role: string;
+      full_name?: string;
+    };
+  };
   token?: string;
 }
 
@@ -19,17 +27,32 @@ export const verifyAuth = async (req: Request, res: Response, next: NextFunction
     }
 
     const token = authHeader.split(' ')[1];
-    const userSupabase = createUserClient(token);
-
-    const { data: { user }, error } = await userSupabase.auth.getUser();
-    if (error || !user) {
-      res.status(401).json({ success: false, error: 'Unauthorized: Invalid token' });
+    if (!token) {
+      res.status(401).json({ success: false, error: 'Unauthorized: Missing token' });
       return;
     }
 
-    // Attach user, scoped supabase client, and token to request object
-    authReq.user = user; // { id, email, user_metadata: { role, full_name, ... }, ... }
-    authReq.supabase = userSupabase;
+    // Verify JWT Access Token
+    let decoded;
+    try {
+      decoded = jwtUtil.verifyAccessToken(token);
+    } catch (err) {
+      res.status(401).json({ success: false, error: 'Unauthorized: Token expired or invalid' });
+      return;
+    }
+
+    // Attach user information to request object
+    authReq.user = {
+      id: decoded.userId,
+      userId: decoded.userId,
+      user_id: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+      user_metadata: {
+        role: decoded.role,
+        full_name: decoded.email ? decoded.email.split('@')[0] : ''
+      }
+    };
     authReq.token = token;
 
     next();
@@ -47,8 +70,8 @@ export const requireRole = (...roles: string[]) => {
       return;
     }
 
-    const userRole = authReq.user.user_metadata?.role || authReq.user.role;
-    if (!roles.includes(userRole)) {
+    const userRole = authReq.user.role || authReq.user.user_metadata?.role;
+    if (!userRole || !roles.includes(userRole)) {
       res.status(403).json({ success: false, error: 'Forbidden: Insufficient permissions' });
       return;
     }
@@ -64,7 +87,7 @@ export const requireApprovedTutor = async (req: Request, res: Response, next: Ne
     return;
   }
 
-  const userRole = authReq.user.user_metadata?.role || authReq.user.role;
+  const userRole = authReq.user.role || authReq.user.user_metadata?.role;
 
   // Admin is always allowed
   if (userRole === 'admin') {
@@ -77,8 +100,14 @@ export const requireApprovedTutor = async (req: Request, res: Response, next: Ne
   }
 
   try {
+    const userId = authReq.user.user_id || authReq.user.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized: User ID not found' });
+      return;
+    }
+
     const profile = await prisma.tutorProfile.findUnique({
-      where: { user_id: authReq.user.id }
+      where: { user_id: userId }
     });
 
     if (!profile || profile.verified_status !== 'approved') {
@@ -95,4 +124,3 @@ export const requireApprovedTutor = async (req: Request, res: Response, next: Ne
     res.status(500).json({ success: false, error: 'Internal server error while checking tutor verification status' });
   }
 };
-

@@ -1,10 +1,54 @@
 import { prisma } from '../config/prisma';
 
 export const userRepository = {
+  // Tìm kiếm thông tin user theo Email
+  async findByEmail(email: string) {
+    return (prisma.user as any).findUnique({
+      where: { email },
+      include: {
+        student_profile: true,
+        tutor_profile: true
+      }
+    });
+  },
+
+  // Tạo mới User trực tiếp trong CSDL
+  async createUser(data: {
+    email: string;
+    password?: string;
+    full_name: string;
+    role?: 'student' | 'tutor' | 'admin';
+    phone?: string;
+    gender?: string;
+    date_of_birth?: Date;
+  }) {
+    const role = data.role || 'student';
+
+    return (prisma.user as any).create({
+      data: {
+        email: data.email,
+        password: data.password,
+        full_name: data.full_name,
+        role: role,
+        phone: data.phone,
+        gender: data.gender,
+        date_of_birth: data.date_of_birth,
+        ...(role === 'student'
+          ? { student_profile: { create: {} } }
+          : role === 'tutor'
+          ? { tutor_profile: { create: {} } }
+          : {})
+      },
+      include: {
+        student_profile: true,
+        tutor_profile: true
+      }
+    });
+  },
 
   // Tìm kiếm thông tin profile của user theo ID
   async findById(userId: string) {
-    const user = await prisma.user.findUnique({
+    const user = await (prisma.user as any).findUnique({
       where: { user_id: userId },
       include: {
         student_profile: true,
@@ -33,13 +77,13 @@ export const userRepository = {
   async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; metadata?: any }) {
     const { metadata, ...userData } = data;
 
-    const user = await prisma.user.update({
+    const user = await (prisma.user as any).update({
       where: { user_id: userId },
       data: userData
     });
 
     if (metadata) {
-      await prisma.studentProfile.upsert({
+      await (prisma.studentProfile as any).upsert({
         where: { user_id: userId },
         update: {
           grade_level: metadata.grade_level,
@@ -60,6 +104,35 @@ export const userRepository = {
     }
 
     return user;
-  }
+  },
 
+  // Quản lý Refresh Token trong DB
+  async saveRefreshToken(userId: string, token: string, expiresAt: Date) {
+    return (prisma.refreshToken as any).create({
+      data: {
+        user_id: userId,
+        token,
+        expires_at: expiresAt
+      }
+    });
+  },
+
+  async findRefreshToken(token: string) {
+    return (prisma.refreshToken as any).findUnique({
+      where: { token },
+      include: { user: true }
+    });
+  },
+
+  async deleteRefreshToken(token: string) {
+    return (prisma.refreshToken as any).deleteMany({
+      where: { token }
+    });
+  },
+
+  async deleteUserRefreshTokens(userId: string) {
+    return (prisma.refreshToken as any).deleteMany({
+      where: { user_id: userId }
+    });
+  }
 };
