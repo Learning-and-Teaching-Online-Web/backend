@@ -1,5 +1,14 @@
 import { prisma } from '../config/prisma';
 
+function formatCourseUser(course: any) {
+  if (!course) return course;
+  if (course.tutor?.user) {
+    course.tutor.user.full_name = course.tutor.user.user_profile?.full_name || '';
+    course.tutor.user.avatar_url = course.tutor.user.user_profile?.avatar_url || null;
+  }
+  return course;
+}
+
 export const courseRepository = {
   // Find course details including tutor, schedules, documents, and quizzes
   async findById(courseId: string) {
@@ -9,7 +18,11 @@ export const courseRepository = {
         tutor: {
           include: {
             user: {
-              select: { full_name: true, avatar_url: true }
+              select: {
+                user_profile: {
+                  select: { full_name: true, avatar_url: true }
+                }
+              }
             }
           }
         },
@@ -27,10 +40,11 @@ export const courseRepository = {
 
     if (!data) return null;
 
-    const uniqueStudents = new Set(data.bookings?.map(b => b.student_id));
+    const formatted = formatCourseUser(data);
+    const uniqueStudents = new Set(formatted.bookings?.map((b: any) => b.student_id));
     return {
-      ...data,
-      price: Number(data.price),
+      ...formatted,
+      price: Number(formatted.price),
       studentsCount: uniqueStudents.size
     };
   },
@@ -70,7 +84,11 @@ export const courseRepository = {
           tutor: {
             include: {
               user: {
-                select: { full_name: true, avatar_url: true }
+                select: {
+                  user_profile: {
+                    select: { full_name: true, avatar_url: true }
+                  }
+                }
               }
             },
           },
@@ -92,10 +110,11 @@ export const courseRepository = {
     ]);
 
     const mappedData = data.map(course => {
-      const uniqueStudents = new Set(course.bookings?.map(b => b.student_id));
+      const formatted = formatCourseUser(course);
+      const uniqueStudents = new Set(formatted.bookings?.map((b: any) => b.student_id));
       return {
-        ...course,
-        price: Number(course.price),
+        ...formatted,
+        price: Number(formatted.price),
         studentsCount: uniqueStudents.size
       };
     });
@@ -134,7 +153,6 @@ export const courseRepository = {
   },
 
   // Add schedule to a course
-
   async addSchedule(scheduleData: any) {
     const data = await prisma.courseSchedule.create({
       data: scheduleData
@@ -144,7 +162,6 @@ export const courseRepository = {
   },
 
   // Find existing schedules to prevent overlap
-
   async findOverlappingSchedules(tutorId: string, startTime: string, endTime: string) {
     const overlaps = await prisma.courseSchedule.findMany({
       where: {
@@ -163,4 +180,3 @@ export const courseRepository = {
     return overlaps;
   }
 };
-

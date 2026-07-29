@@ -30,7 +30,7 @@ export const bookingRepository = {
 
   // Find bookings by studentId, joining courses and tutor profile/user info
   async findByStudentId(studentId: string) {
-    const data = await prisma.booking.findMany({
+    const bookings = await prisma.booking.findMany({
       where: { student_id: studentId },
       include: {
         course: {
@@ -38,7 +38,11 @@ export const bookingRepository = {
             tutor: {
               include: {
                 user: {
-                  select: { full_name: true, avatar_url: true }
+                  select: {
+                    user_profile: {
+                      select: { full_name: true, avatar_url: true }
+                    }
+                  }
                 }
               }
             }
@@ -49,7 +53,13 @@ export const bookingRepository = {
       orderBy: { created_at: 'desc' }
     });
 
-    return data;
+    return bookings.map((b: any) => {
+      if (b.course?.tutor?.user) {
+        b.course.tutor.user.full_name = b.course.tutor.user.user_profile?.full_name || '';
+        b.course.tutor.user.avatar_url = b.course.tutor.user.user_profile?.avatar_url || null;
+      }
+      return b;
+    });
   },
 
   // Check if student already enrolled in a specific course

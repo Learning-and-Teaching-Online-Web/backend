@@ -1,21 +1,35 @@
 import { prisma } from '../config/prisma';
 
+function formatCommentUser(comment: any) {
+  if (comment?.user) {
+    comment.user.full_name = comment.user.user_profile?.full_name || '';
+    comment.user.avatar_url = comment.user.user_profile?.avatar_url || null;
+  }
+  return comment;
+}
+
 export const articleCommentRepository = {
   async findByArticleId(articleId: string) {
-    return await prisma.articleComment.findMany({
+    const comments = await prisma.articleComment.findMany({
       where: { article_id: articleId },
       include: {
         user: {
           select: {
             user_id: true,
-            full_name: true,
-            avatar_url: true,
-            role: true
+            role: true,
+            user_profile: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
+            }
           }
         }
       },
       orderBy: { created_at: 'asc' }
     });
+
+    return comments.map(formatCommentUser);
   },
 
   async findById(commentId: string) {
@@ -31,9 +45,13 @@ export const articleCommentRepository = {
         user: {
           select: {
             user_id: true,
-            full_name: true,
-            avatar_url: true,
-            role: true
+            role: true,
+            user_profile: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
+            }
           }
         }
       }
@@ -47,7 +65,7 @@ export const articleCommentRepository = {
       }
     }).catch(err => console.error('Failed to increment commentsCount on article:', err));
 
-    return comment;
+    return formatCommentUser(comment);
   },
 
   async delete(commentId: string) {

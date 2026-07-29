@@ -45,20 +45,32 @@ export const favoriteRepository = {
   },
 
   async getFavoritesByStudentId(studentId: string) {
-    return await prisma.favorite.findMany({
+    const favorites = await prisma.favorite.findMany({
       where: { student_id: studentId },
       include: {
         tutor: {
           include: {
             user: {
               select: {
-                full_name: true,
-                avatar_url: true
+                user_profile: {
+                  select: {
+                    full_name: true,
+                    avatar_url: true
+                  }
+                }
               }
             }
           }
         }
       }
+    });
+
+    return favorites.map((f: any) => {
+      if (f.tutor?.user) {
+        f.tutor.user.full_name = f.tutor.user.user_profile?.full_name || '';
+        f.tutor.user.avatar_url = f.tutor.user.user_profile?.avatar_url || null;
+      }
+      return f;
     });
   }
 };
