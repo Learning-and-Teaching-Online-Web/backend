@@ -1,6 +1,18 @@
 import { prisma } from '../config/prisma';
 import { supabaseAdmin } from '../config/supabase';
 
+function formatTutorUser(tutor: any) {
+  if (!tutor) return tutor;
+  if (tutor.user) {
+    const profile = tutor.user.user_profile;
+    tutor.user.full_name = profile?.full_name || '';
+    tutor.user.avatar_url = profile?.avatar_url || null;
+    tutor.user.phone = profile?.phone || null;
+    tutor.user.bio = profile?.bio || null;
+  }
+  return tutor;
+}
+
 export const tutorRepository = {
 
   async findByUserId(userId: string) {
@@ -9,15 +21,16 @@ export const tutorRepository = {
       include: {
         user: {
           select: {
-            full_name: true,
-            avatar_url: true,
-            email: true
+            email: true,
+            user_profile: {
+              select: { full_name: true, avatar_url: true, phone: true, bio: true }
+            }
           }
         }
       }
     });
 
-    return data;
+    return formatTutorUser(data);
   },
 
   async findById(tutorId: string) {
@@ -26,15 +39,16 @@ export const tutorRepository = {
       include: {
         user: {
           select: {
-            full_name: true,
-            avatar_url: true,
-            email: true
+            email: true,
+            user_profile: {
+              select: { full_name: true, avatar_url: true, phone: true, bio: true }
+            }
           }
         }
       }
     });
 
-    return data;
+    return formatTutorUser(data);
   },
 
   async findAll() {
@@ -49,15 +63,16 @@ export const tutorRepository = {
       include: {
         user: {
           select: {
-            full_name: true,
-            avatar_url: true,
-            email: true
+            email: true,
+            user_profile: {
+              select: { full_name: true, avatar_url: true, phone: true, bio: true }
+            }
           }
         }
       }
     });
 
-    return data || [];
+    return (data || []).map(formatTutorUser);
   },
 
   // Calculate statistics for the Tutor Dashboard
@@ -110,7 +125,7 @@ export const tutorRepository = {
 
   // Fetch bookings for courses owned by this tutor
   async getBookings(tutorId: string) {
-    return await prisma.booking.findMany({
+    const bookings = await prisma.booking.findMany({
       where: {
         course: { tutor_id: tutorId }
       },
@@ -119,9 +134,10 @@ export const tutorRepository = {
           include: {
             user: {
               select: {
-                full_name: true,
                 email: true,
-                avatar_url: true
+                user_profile: {
+                  select: { full_name: true, avatar_url: true }
+                }
               }
             }
           }
@@ -141,6 +157,14 @@ export const tutorRepository = {
       orderBy: {
         created_at: 'desc'
       }
+    });
+
+    return bookings.map((b: any) => {
+      if (b.student?.user) {
+        b.student.user.full_name = b.student.user.user_profile?.full_name || '';
+        b.student.user.avatar_url = b.student.user.user_profile?.avatar_url || null;
+      }
+      return b;
     });
   },
 
@@ -206,15 +230,17 @@ export const tutorRepository = {
 
   // Fetch reviews left for this tutor
   async getReviews(tutorId: string) {
-    return await prisma.review.findMany({
+    const reviews = await prisma.review.findMany({
       where: { tutor_id: tutorId, is_visible: true },
       include: {
         student: {
           include: {
             user: {
               select: {
-                full_name: true,
-                avatar_url: true
+                email: true,
+                user_profile: {
+                  select: { full_name: true, avatar_url: true }
+                }
               }
             }
           }
@@ -232,6 +258,14 @@ export const tutorRepository = {
       orderBy: {
         created_at: 'desc'
       }
+    });
+
+    return reviews.map((r: any) => {
+      if (r.student?.user) {
+        r.student.user.full_name = r.student.user.user_profile?.full_name || '';
+        r.student.user.avatar_url = r.student.user.user_profile?.avatar_url || null;
+      }
+      return r;
     });
   },
 
@@ -320,11 +354,10 @@ export const tutorRepository = {
         },
         user: {
           select: {
-            full_name: true,
             email: true,
-            phone: true,
-            avatar_url: true,
-            bio: true
+            user_profile: {
+              select: { full_name: true, phone: true, avatar_url: true, bio: true }
+            }
           }
         }
       }
@@ -343,18 +376,17 @@ export const tutorRepository = {
           },
           user: {
             select: {
-              full_name: true,
               email: true,
-              phone: true,
-              avatar_url: true,
-              bio: true
+              user_profile: {
+                select: { full_name: true, phone: true, avatar_url: true, bio: true }
+              }
             }
           }
         }
       });
     }
 
-    return profile;
+    return formatTutorUser(profile);
   },
 
   // Update tutor profile fields
@@ -373,7 +405,6 @@ export const tutorRepository = {
     const updatedProfile = await prisma.tutorProfile.update({
       where: { tutor_id: tutor.tutor_id },
       data: {
-        bio: data.bio !== undefined ? data.bio : tutor.bio,
         education: data.education !== undefined ? data.education : tutor.education,
         experience_years: data.experience_years !== undefined ? Number(data.experience_years) : tutor.experience_years,
         hourly_rate: data.hourly_rate !== undefined ? Number(data.hourly_rate) : tutor.hourly_rate,
@@ -388,24 +419,24 @@ export const tutorRepository = {
         },
         user: {
           select: {
-            full_name: true,
             email: true,
-            phone: true,
-            avatar_url: true,
-            bio: true
+            user_profile: {
+              select: { full_name: true, phone: true, avatar_url: true, bio: true }
+            }
           }
         }
       }
     });
 
-    if (data.bio) {
-      await prisma.user.update({
+    if (data.bio !== undefined) {
+      await (prisma.userProfile as any).upsert({
         where: { user_id: userId },
-        data: { bio: data.bio }
+        update: { bio: data.bio },
+        create: { user_id: userId, full_name: '', bio: data.bio }
       });
     }
 
-    return updatedProfile;
+    return formatTutorUser(updatedProfile);
   },
 
   // Add new certificate for tutor

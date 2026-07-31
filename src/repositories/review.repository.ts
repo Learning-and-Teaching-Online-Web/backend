@@ -2,22 +2,34 @@ import { prisma } from '../config/prisma';
 
 export const reviewRepository = {
   async findVisibleReviews() {
-    return await prisma.review.findMany({
+    const reviews = await prisma.review.findMany({
       where: { is_visible: true },
       include: {
         student: {
           include: {
             user: {
               select: {
-                full_name: true,
-                avatar_url: true,
-                role: true
+                role: true,
+                user_profile: {
+                  select: {
+                    full_name: true,
+                    avatar_url: true
+                  }
+                }
               }
             }
           }
         }
       },
       orderBy: { created_at: 'desc' }
+    });
+
+    return reviews.map((r: any) => {
+      if (r.student?.user) {
+        r.student.user.full_name = r.student.user.user_profile?.full_name || '';
+        r.student.user.avatar_url = r.student.user.user_profile?.avatar_url || null;
+      }
+      return r;
     });
   },
 

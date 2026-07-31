@@ -36,12 +36,6 @@ model User {
   user_id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
   email           String     @unique @db.Citext // Email đăng nhập
   password        String?    // Mật khẩu người dùng (đã được mã hóa bcrypt)
-  full_name       String     // Họ và tên đầy đủ của người dùng
-  phone           String?    // Số điện thoại liên hệ (tùy chọn)
-  avatar_url      String?    // Đường dẫn ảnh đại diện (lưu trên CDN/Cloud Storage)
-  date_of_birth   DateTime?  @db.Date // Ngày tháng năm sinh (chỉ lưu ngày, dùng tính tuổi/lọc lứa tuổi)
-  gender          String?    // Giới tính ("male" | "female" | "other")
-  bio             String?    // Tiểu sử/Giới thiệu ngắn về bản thân
   role            UserRole   @default(student) // Phân quyền (mặc định là học sinh khi đăng ký)
   status          UserStatus @default(active) // Trạng thái tài khoản (mặc định active)
   email_verified  Boolean    @default(false) // Trạng thái xác thực email
@@ -52,6 +46,7 @@ model User {
   last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
 
   // Relations
+  user_profile       UserProfile?
   tutor_profile      TutorProfile?
   student_profile    StudentProfile?
   wallets            Wallet?
@@ -74,6 +69,29 @@ model User {
   @@index([social_provider, social_id], map: "idx_users_social")
   @@map("users")
 }
+
+// ================================================================
+// BẢNG: user_profiles
+// Mô tả: Lưu thông tin cá nhân dùng chung của tất cả người dùng (Học sinh, Gia sư, Admin).
+// Quan hệ: 1-1 với users (user_id @unique).
+// ================================================================
+model UserProfile {
+  profile_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
+  user_id       String    @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
+  full_name     String    // Họ và tên đầy đủ
+  phone         String?   // Số điện thoại liên hệ
+  avatar_url    String?   // Đường dẫn ảnh đại diện (lưu trên CDN/Cloud Storage)
+  date_of_birth DateTime? @db.Date // Ngày tháng năm sinh (chỉ lưu ngày)
+  gender        String?   // Giới tính ("male" | "female" | "other")
+  bio           String?   // Tiểu sử/Giới thiệu ngắn về bản thân
+  created_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
+  updated_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
 
 // ================================================================
 // BẢNG: refresh_tokens

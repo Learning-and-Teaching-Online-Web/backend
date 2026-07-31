@@ -1,21 +1,35 @@
 import { prisma } from '../config/prisma';
 
+function formatCommentUser(comment: any) {
+  if (comment?.user) {
+    comment.user.full_name = comment.user.user_profile?.full_name || '';
+    comment.user.avatar_url = comment.user.user_profile?.avatar_url || null;
+  }
+  return comment;
+}
+
 export const courseCommentRepository = {
   async findByCourseId(courseId: string) {
-    return await prisma.courseComment.findMany({
+    const comments = await prisma.courseComment.findMany({
       where: { course_id: courseId },
       include: {
         user: {
           select: {
             user_id: true,
-            full_name: true,
-            avatar_url: true,
-            role: true
+            role: true,
+            user_profile: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
+            }
           }
         }
       },
       orderBy: { created_at: 'asc' }
     });
+
+    return comments.map(formatCommentUser);
   },
 
   async findById(commentId: string) {
@@ -25,19 +39,25 @@ export const courseCommentRepository = {
   },
 
   async create(data: { course_id: string; user_id: string; content: string; rating?: number }) {
-    return await prisma.courseComment.create({
+    const comment = await prisma.courseComment.create({
       data,
       include: {
         user: {
           select: {
             user_id: true,
-            full_name: true,
-            avatar_url: true,
-            role: true
+            role: true,
+            user_profile: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
+            }
           }
         }
       }
     });
+
+    return formatCommentUser(comment);
   },
 
   async delete(commentId: string) {

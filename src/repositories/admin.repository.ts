@@ -1,6 +1,19 @@
 import { prisma } from '../config/prisma';
 import { UserRole, UserStatus, VerificationStatus, CourseStatus, PayoutStatus } from '@prisma/client';
 
+function formatUserWithProfile(user: any) {
+  if (!user) return user;
+  return {
+    ...user,
+    full_name: user.user_profile?.full_name || '',
+    phone: user.user_profile?.phone || null,
+    avatar_url: user.user_profile?.avatar_url || null,
+    date_of_birth: user.user_profile?.date_of_birth || null,
+    gender: user.user_profile?.gender || null,
+    bio: user.user_profile?.bio || null
+  };
+}
+
 export const adminRepository = {
   // 1. Dashboard Stats
   async getDashboardStats() {
@@ -22,9 +35,13 @@ export const adminRepository = {
       include: {
         user: {
           select: {
-            full_name: true,
             email: true,
-            avatar_url: true
+            user_profile: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
+            }
           }
         }
       }
@@ -55,9 +72,9 @@ export const adminRepository = {
       },
       topTutors: topTutors.map(t => ({
         tutor_id: t.tutor_id,
-        name: t.user?.full_name || 'N/A',
+        name: t.user?.user_profile?.full_name || 'N/A',
         email: t.user?.email || 'N/A',
-        avatar_url: t.user?.avatar_url || null,
+        avatar_url: t.user?.user_profile?.avatar_url || null,
         rating: t.rating ? Number(t.rating) : 0,
         experience_years: t.experience_years || 0
       }))
@@ -80,7 +97,7 @@ export const adminRepository = {
     }
     if (filters.search) {
       whereClause.OR = [
-        { full_name: { contains: filters.search, mode: 'insensitive' } },
+        { user_profile: { full_name: { contains: filters.search, mode: 'insensitive' } } },
         { email: { contains: filters.search, mode: 'insensitive' } }
       ];
     }
@@ -89,6 +106,7 @@ export const adminRepository = {
       prisma.user.findMany({
         where: whereClause,
         include: {
+          user_profile: true,
           student_profile: true,
           tutor_profile: {
             include: {
@@ -103,7 +121,7 @@ export const adminRepository = {
       prisma.user.count({ where: whereClause })
     ]);
 
-    return { users, total };
+    return { users: users.map(formatUserWithProfile), total };
   },
 
   async updateUserStatus(userId: string, status: UserStatus) {
@@ -154,10 +172,14 @@ export const adminRepository = {
         include: {
           user: {
             select: {
-              full_name: true,
               email: true,
-              avatar_url: true,
-              phone: true
+              user_profile: {
+                select: {
+                  full_name: true,
+                  avatar_url: true,
+                  phone: true
+                }
+              }
             }
           },
           certificates: true
@@ -169,7 +191,16 @@ export const adminRepository = {
       prisma.tutorProfile.count({ where: whereClause })
     ]);
 
-    return { tutors, total };
+    const mappedTutors = tutors.map((t: any) => {
+      if (t.user) {
+        t.user.full_name = t.user.user_profile?.full_name || '';
+        t.user.avatar_url = t.user.user_profile?.avatar_url || null;
+        t.user.phone = t.user.user_profile?.phone || null;
+      }
+      return t;
+    });
+
+    return { tutors: mappedTutors, total };
   },
 
   async updateTutorVerificationStatus(tutorId: string, status: VerificationStatus) {
@@ -239,9 +270,13 @@ export const adminRepository = {
             include: {
               user: {
                 select: {
-                  full_name: true,
                   email: true,
-                  avatar_url: true
+                  user_profile: {
+                    select: {
+                      full_name: true,
+                      avatar_url: true
+                    }
+                  }
                 }
               }
             }
@@ -254,7 +289,15 @@ export const adminRepository = {
       prisma.course.count({ where: whereClause })
     ]);
 
-    return { courses, total };
+    const mappedCourses = courses.map((c: any) => {
+      if (c.tutor?.user) {
+        c.tutor.user.full_name = c.tutor.user.user_profile?.full_name || '';
+        c.tutor.user.avatar_url = c.tutor.user.user_profile?.avatar_url || null;
+      }
+      return c;
+    });
+
+    return { courses: mappedCourses, total };
   },
 
   async updateCourseStatus(courseId: string, status: CourseStatus) {
@@ -275,8 +318,10 @@ export const adminRepository = {
         include: {
           user: {
             select: {
-              full_name: true,
-              email: true
+              email: true,
+              user_profile: {
+                select: { full_name: true }
+              }
             }
           },
           booking: {
@@ -296,7 +341,14 @@ export const adminRepository = {
       prisma.transaction.count()
     ]);
 
-    return { transactions, total };
+    const mappedTransactions = transactions.map((t: any) => {
+      if (t.user) {
+        t.user.full_name = t.user.user_profile?.full_name || '';
+      }
+      return t;
+    });
+
+    return { transactions: mappedTransactions, total };
   },
 
   async getPayouts(filters: { status?: string; page: number; limit: number }) {
@@ -317,8 +369,10 @@ export const adminRepository = {
             include: {
               user: {
                 select: {
-                  full_name: true,
-                  email: true
+                  email: true,
+                  user_profile: {
+                    select: { full_name: true }
+                  }
                 }
               }
             }
@@ -331,7 +385,14 @@ export const adminRepository = {
       prisma.payout.count({ where: whereClause })
     ]);
 
-    return { payouts, total };
+    const mappedPayouts = payouts.map((p: any) => {
+      if (p.tutor?.user) {
+        p.tutor.user.full_name = p.tutor.user.user_profile?.full_name || '';
+      }
+      return p;
+    });
+
+    return { payouts: mappedPayouts, total };
   },
 
   async updatePayoutStatus(payoutId: string, status: PayoutStatus, adminId?: string) {
