@@ -37,12 +37,51 @@ export const reviewController = {
       const { prisma } = require('../config/prisma');
       const booking = await prisma.booking.findUnique({
         where: { booking_id },
-        include: { course: true }
+        include: { 
+          course: true,
+          student: true
+        }
       });
 
       if (!booking) {
         res.status(404).json({ success: false, error: 'Không tìm thấy thông tin đơn đặt lớp.' });
         return;
+      }
+
+      // Check student ownership if auth req user is present
+      const authReq = req as any;
+      if (authReq.user && authReq.user.user_id && booking.student?.user_id !== authReq.user.user_id) {
+        res.status(403).json({ success: false, error: 'Bạn không có quyền đánh giá đơn đặt lớp của người khác.' });
+        return;
+      }
+
+      // Business Rule Validation:
+      // 1. Mandatory: Course must be paid (or confirmed/completed)
+      const isPaid = booking.payment_status === 'paid' || booking.status === 'confirmed' || booking.status === 'completed';
+      if (!isPaid) {
+        res.status(400).json({ success: false, error: 'Bạn cần hoàn tất thanh toán khóa học trước khi gửi đánh giá.' });
+        return;
+      }
+
+      // 2. Course Type logic:
+      // - Offline course: User can rate as long as it's purchased/paid
+      // - Online course: User MUST finish/complete the course (booking.status === 'completed') before rating
+      if (booking.course.type === 'online') {
+        if (booking.status !== 'completed') {
+          res.status(400).json({
+            success: false,
+            error: 'Khóa học Online cần phải kết thúc toàn bộ khóa học (trạng thái Hoàn thành) mới có thể gửi đánh giá.'
+          });
+          return;
+        }
+      } else if (booking.course.type === 'offline') {
+        if (!isPaid) {
+          res.status(400).json({
+            success: false,
+            error: 'Bạn cần mua khóa học Offline thành công trước khi gửi đánh giá.'
+          });
+          return;
+        }
       }
 
       const review = await reviewRepository.insert({
