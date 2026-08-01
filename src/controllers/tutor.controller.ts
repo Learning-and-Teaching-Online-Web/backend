@@ -274,6 +274,24 @@ export const tutorController = {
       console.error('Error in deleteCertificate controller:', error);
       res.status(400).json({ success: false, error: error.message || error });
     }
+  },
+
+
+
+  // Get ClassSessions for the current tutor
+  async getClassSessions(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+      const result = await tutorService.getClassSessions(userId);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('Error in getClassSessions controller:', error);
+      res.status(500).json({ success: false, error: error.message || error });
+    }
   }
 };
 

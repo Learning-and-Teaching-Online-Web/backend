@@ -39,6 +39,7 @@ export const bookingRepository = {
               include: {
                 user: {
                   select: {
+                    email: true,
                     user_profile: {
                       select: { full_name: true, avatar_url: true }
                     }
@@ -83,6 +84,14 @@ export const bookingRepository = {
       data: { is_booked: isBooked }
     });
 
+    return data;
+  },
+
+  // Insert multiple ClassSessions (Batch Insert)
+  async insertClassSessions(sessions: any[]) {
+    const data = await prisma.classSession.createMany({
+      data: sessions
+    });
     return data;
   }
 };

@@ -11,6 +11,7 @@ tutorRoutes.post('/certificates', verifyAuth, requireRole('tutor'), tutorControl
 tutorRoutes.delete('/certificates/:certId', verifyAuth, requireRole('tutor'), tutorController.deleteCertificate);
 tutorRoutes.get('/bookings', verifyAuth, requireRole('tutor'), tutorController.getBookings);
 tutorRoutes.patch('/bookings/:id', verifyAuth, requireRole('tutor'), tutorController.updateBookingStatus);
+tutorRoutes.get('/class-sessions', verifyAuth, requireRole('tutor'), tutorController.getClassSessions);
 tutorRoutes.get('/reviews', verifyAuth, requireRole('tutor'), tutorController.getReviews);
 tutorRoutes.get('/wallet', verifyAuth, requireRole('tutor'), tutorController.getWallet);
 tutorRoutes.post('/wallet/withdraw', verifyAuth, requireRole('tutor'), tutorController.withdrawFunds);

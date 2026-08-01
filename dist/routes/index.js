@@ -1,0 +1,28 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_routes_1 = __importDefault(require("./auth.routes"));
+const subject_routes_1 = __importDefault(require("./subject.routes"));
+const course_routes_1 = __importDefault(require("./course.routes"));
+const booking_routes_1 = __importDefault(require("./booking.routes"));
+const article_routes_1 = __importDefault(require("./article.routes"));
+const favorite_routes_1 = __importDefault(require("./favorite.routes"));
+const quiz_routes_1 = __importDefault(require("./quiz.routes"));
+const review_routes_1 = __importDefault(require("./review.routes"));
+const tutor_routes_1 = __importDefault(require("./tutor.routes"));
+const admin_routes_1 = __importDefault(require("./admin.routes"));
+const rootRouter = (0, express_1.Router)();
+rootRouter.use('/auth', auth_routes_1.default);
+rootRouter.use('/subjects', subject_routes_1.default);
+rootRouter.use('/courses', course_routes_1.default);
+rootRouter.use('/bookings', booking_routes_1.default);
+rootRouter.use('/blog', article_routes_1.default);
+rootRouter.use('/favorites', favorite_routes_1.default);
+rootRouter.use('/quizzes', quiz_routes_1.default);
+rootRouter.use('/reviews', review_routes_1.default);
+rootRouter.use('/tutors', tutor_routes_1.default);
+rootRouter.use('/admin', admin_routes_1.default);
+exports.default = rootRouter;

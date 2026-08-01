@@ -77,6 +77,25 @@ export const courseController = {
     }
   },
 
+  // Delete all schedules of a course
+  async deleteSchedules(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const courseId = req.params.id as string;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+        return;
+      }
+
+      await courseService.deleteCourseSchedules(userId, courseId);
+      res.status(200).json({ success: true, message: 'Xóa lịch dạy thành công' });
+    } catch (error: any) {
+      console.error('Error in deleteSchedules controller:', error);
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  },
+
   // Add lesson to a course
   async addLesson(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {

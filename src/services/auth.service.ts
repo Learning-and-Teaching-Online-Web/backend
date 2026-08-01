@@ -33,7 +33,7 @@ export const authService = {
     });
 
     // Tạo cặp token
-    const tokenPayload = { userId: user.user_id, email: user.email, role: user.role };
+    const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name || fullName };
     const accessToken = jwtUtil.generateAccessToken(tokenPayload);
     const refreshToken = jwtUtil.generateRefreshToken(tokenPayload);
 
@@ -75,7 +75,7 @@ export const authService = {
     }
 
     // Tạo cặp token JWT (access_token: 2h, refresh_token: 7d)
-    const tokenPayload = { userId: user.user_id, email: user.email, role: user.role };
+    const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name || user.user_profile?.full_name };
     const accessToken = jwtUtil.generateAccessToken(tokenPayload);
     const refreshToken = jwtUtil.generateRefreshToken(tokenPayload);
 

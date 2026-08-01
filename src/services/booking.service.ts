@@ -1,6 +1,7 @@
 import { bookingRepository } from '../repositories/booking.repository';
 import { courseRepository } from '../repositories/course.repository';
 import { userRepository } from '../repositories/user.repository';
+import { prisma } from '../config/prisma';
 
 export const bookingService = {
   // Create a new booking (Supports Online & Offline courses)
@@ -48,8 +49,8 @@ export const bookingService = {
       student_id: student.student_id,
       course_id: courseId,
       schedule_id: finalScheduleId,
-      status: 'confirmed',
-      payment_status: 'paid',
+      status: 'pending', // MVP: Tutor must manually approve
+      payment_status: 'unpaid', // MVP: Payment pending
       total_amount: Number(course.price),
       currency: 'VND',
       notes: notes || ''
@@ -74,6 +75,72 @@ export const bookingService = {
     }
 
     return booking;
+  },
+
+  // Auto-generate ClassSessions for Online Course when Tutor approves booking
+  async generateClassSessionsForBooking(bookingId: string) {
+    const booking = await prisma.booking.findUnique({
+      where: { booking_id: bookingId },
+      include: {
+        course: {
+          include: { schedules: { orderBy: { start_time: 'asc' } } }
+        }
+      }
+    });
+
+    if (!booking || !booking.course) return;
+    
+    const course = booking.course;
+    
+    if (course.type === 'online' && course.start_date && course.end_date) {
+      const schedules = course.schedules || [];
+      const classSessions = [];
+      const startDate = new Date(course.start_date);
+      const endDate = new Date(course.end_date);
+      
+      let curr = new Date(startDate);
+      let sessionCount = 0;
+      const totalSessions = course.total_sessions || 999; 
+
+      while (curr <= endDate && sessionCount < totalSessions) {
+        const dayOfWeek = curr.getDay(); 
+        
+        const matchingSchedules = schedules.filter((s: any) => s.day_of_week === dayOfWeek && s.is_recurring);
+        
+        for (const sched of matchingSchedules) {
+          if (sessionCount >= totalSessions) break;
+          
+          const schedStart = new Date(sched.start_time);
+          const schedEnd = new Date(sched.end_time);
+          
+          const actualStart = new Date(curr);
+          actualStart.setHours(schedStart.getHours(), schedStart.getMinutes(), 0, 0);
+          
+          const actualEnd = new Date(curr);
+          actualEnd.setHours(schedEnd.getHours(), schedEnd.getMinutes(), 0, 0);
+          
+          classSessions.push({
+            booking_id: booking.booking_id,
+            room_id: `room_${booking.booking_id}_${sessionCount + 1}`,
+            title: `Buổi ${sessionCount + 1}`,
+            scheduled_start: actualStart,
+            scheduled_end: actualEnd,
+            status: 'scheduled'
+          });
+          
+          sessionCount++;
+        }
+        curr.setDate(curr.getDate() + 1);
+      }
+
+      if (classSessions.length > 0) {
+        try {
+          await bookingRepository.insertClassSessions(classSessions);
+        } catch (sessionError: any) {
+          console.error("Failed to generate class sessions:", sessionError);
+        }
+      }
+    }
   },
 
   // Get bookings for currently logged-in student

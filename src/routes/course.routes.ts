@@ -37,5 +37,6 @@ courseRoutes.delete('/:id', verifyAuth, requireApprovedTutor, courseController.d
 
 // Schedule routes
 courseRoutes.post('/:id/schedules', verifyAuth, requireApprovedTutor, courseController.addSchedule);
+courseRoutes.delete('/:id/schedules', verifyAuth, requireApprovedTutor, courseController.deleteSchedules);
 
 export default courseRoutes;

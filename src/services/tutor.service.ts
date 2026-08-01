@@ -1,4 +1,5 @@
 import { tutorRepository } from '../repositories/tutor.repository';
+import { bookingService } from './booking.service';
 
 export const tutorService = {
   // Get dashboard statistics for the logged-in tutor
@@ -25,7 +26,17 @@ export const tutorService = {
     if (!tutor) {
       throw new Error('Hồ sơ gia sư không tồn tại');
     }
-    return await tutorRepository.updateBookingStatus(bookingId, status);
+    const updated = await tutorRepository.updateBookingStatus(bookingId, status);
+    
+    // Auto-generate class sessions if booking is approved
+    if (status === 'confirmed') {
+      try {
+        await bookingService.generateClassSessionsForBooking(bookingId);
+      } catch (e) {
+        console.error("Failed to generate class sessions upon approval:", e);
+      }
+    }
+    return updated;
   },
 
   // Get student reviews for this tutor
@@ -75,5 +86,14 @@ export const tutorService = {
   async deleteCertificate(userId: string, certId: string) {
     const tutor = await tutorRepository.getMyProfile(userId);
     return await tutorRepository.deleteCertificate(tutor.tutor_id, certId);
+  },
+
+  // Get ClassSessions for the current tutor
+  async getClassSessions(userId: string) {
+    const tutor = await tutorRepository.findByUserId(userId);
+    if (!tutor) {
+      throw new Error('Hồ sơ gia sư không tồn tại');
+    }
+    return await tutorRepository.getClassSessions(tutor.tutor_id);
   }
 };
