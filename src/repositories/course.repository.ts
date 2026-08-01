@@ -162,6 +162,13 @@ export const courseRepository = {
     return data;
   },
 
+  // Delete all schedules of a course
+  async deleteCourseSchedules(courseId: string) {
+    return await (prisma.courseSchedule as any).deleteMany({
+      where: { course_id: courseId }
+    });
+  },
+
   // Add schedule to a course
   async addSchedule(scheduleData: any) {
     const data = await (prisma.courseSchedule as any).create({
@@ -171,23 +178,18 @@ export const courseRepository = {
     return data;
   },
 
-  // Find existing schedules to prevent overlap
-  async findOverlappingSchedules(tutorId: string, startTime: string, endTime: string) {
-    const overlaps = await (prisma.courseSchedule as any).findMany({
+  // Find all schedules of a tutor
+  async findSchedulesByTutor(tutorId: string) {
+    const schedules = await (prisma.courseSchedule as any).findMany({
       where: {
-        course: { tutor_id: tutorId },
-        OR: [
-          { start_time: { lte: new Date(startTime) }, end_time: { gt: new Date(startTime) } },
-          { start_time: { lt: new Date(endTime) }, end_time: { gte: new Date(endTime) } },
-          { start_time: { gte: new Date(startTime) }, end_time: { lte: new Date(endTime) } }
-        ]
+        course: { tutor_id: tutorId, status: { in: ['published', 'draft'] } }
       },
       include: {
-        course: { select: { tutor_id: true } }
+        course: { select: { title: true } }
       }
     });
 
-    return overlaps;
+    return schedules;
   },
 
   // CourseLesson CRUD

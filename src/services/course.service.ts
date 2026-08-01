@@ -158,9 +158,25 @@ export const courseService = {
     }
 
     // Check overlap with existing schedules of this tutor
-    const overlaps = await courseRepository.findOverlappingSchedules(tutor.tutor_id, start_time, end_time);
-    if (overlaps.length > 0) {
-      throw new Error('Thời gian này đã bị trùng lịch với lịch dạy khác của bạn');
+    const existingSchedules = await courseRepository.findSchedulesByTutor(tutor.tutor_id);
+    
+    const newStartDate = new Date(start_time);
+    const newEndDate = new Date(end_time);
+    const newStartMins = newStartDate.getHours() * 60 + newStartDate.getMinutes();
+    const newEndMins = newEndDate.getHours() * 60 + newEndDate.getMinutes();
+
+    for (const s of existingSchedules) {
+      // If it's recurring and on the same day
+      if (s.is_recurring && is_recurring && s.day_of_week === day_of_week) {
+        const existStartDate = new Date(s.start_time);
+        const existEndDate = new Date(s.end_time);
+        const existStartMins = existStartDate.getHours() * 60 + existStartDate.getMinutes();
+        const existEndMins = existEndDate.getHours() * 60 + existEndDate.getMinutes();
+        
+        if (existStartMins < newEndMins && existEndMins > newStartMins) {
+          throw new Error(`Khung giờ này đã bị trùng với khóa học: "${s.course.title}"`);
+        }
+      }
     }
 
     const payload = {
@@ -175,6 +191,25 @@ export const courseService = {
     };
 
     return await courseRepository.addSchedule(payload);
+  },
+
+  // Delete all schedules of a course
+  async deleteCourseSchedules(userId: string, courseId: string) {
+    const tutor = await tutorRepository.findByUserId(userId);
+    if (!tutor) throw new Error('Hồ sơ gia sư không tồn tại');
+
+    const course = await courseRepository.findById(courseId);
+    if (!course) throw new Error('Không tìm thấy khóa học');
+    
+    if (course.tutor_id !== tutor.tutor_id) {
+      throw new Error('Bạn không có quyền quản lý lịch của khóa học này');
+    }
+
+    if (course.status === 'published') {
+      throw new Error('Không thể xóa lịch của khóa học đã xuất bản');
+    }
+
+    return await courseRepository.deleteCourseSchedules(courseId);
   },
 
   // CourseLesson methods

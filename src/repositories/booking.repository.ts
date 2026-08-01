@@ -84,5 +84,13 @@ export const bookingRepository = {
     });
 
     return data;
+  },
+
+  // Insert multiple ClassSessions (Batch Insert)
+  async insertClassSessions(sessions: any[]) {
+    const data = await prisma.classSession.createMany({
+      data: sessions
+    });
+    return data;
   }
 };

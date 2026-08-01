@@ -537,5 +537,49 @@ export const tutorRepository = {
     });
 
     return true;
+  },
+
+  // Get ClassSessions for a tutor via their courses and bookings
+  async getClassSessions(tutorId: string) {
+    // We want all ClassSessions that belong to a booking that belongs to a course owned by the tutor
+    const sessions = await prisma.classSession.findMany({
+      where: {
+        booking: {
+          course: {
+            tutor_id: tutorId
+          }
+        }
+      },
+      include: {
+        booking: {
+          include: {
+            course: true,
+            student: {
+              include: {
+                user: {
+                  select: {
+                    user_profile: {
+                      select: { full_name: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { scheduled_start: 'asc' }
+    });
+
+    return sessions.map((s: any) => ({
+      session_id: s.session_id,
+      title: s.title,
+      scheduled_start: s.scheduled_start,
+      scheduled_end: s.scheduled_end,
+      status: s.status,
+      room_id: s.room_id,
+      course_title: s.booking?.course?.title || '',
+      student_name: s.booking?.student?.user?.user_profile?.full_name || 'Học sinh'
+    }));
   }
 };
