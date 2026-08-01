@@ -1,6 +1,7 @@
 import { bookingRepository } from '../repositories/booking.repository';
 import { courseRepository } from '../repositories/course.repository';
 import { userRepository } from '../repositories/user.repository';
+import { prisma } from '../config/prisma';
 
 export const bookingService = {
   // Create a new booking (Supports Online & Offline courses)
@@ -48,8 +49,8 @@ export const bookingService = {
       student_id: student.student_id,
       course_id: courseId,
       schedule_id: finalScheduleId,
-      status: 'confirmed', // MVP Bypass ZaloPay: Auto set to confirmed
-      payment_status: 'paid', // MVP Bypass ZaloPay: Auto set to paid
+      status: 'pending', // MVP: Tutor must manually approve
+      payment_status: 'unpaid', // MVP: Payment pending
       total_amount: Number(course.price),
       currency: 'VND',
       notes: notes || ''
@@ -73,7 +74,24 @@ export const bookingService = {
       }
     }
 
-    // 8. Auto-generate ClassSessions for Online Course based on Fixed Schedules
+    return booking;
+  },
+
+  // Auto-generate ClassSessions for Online Course when Tutor approves booking
+  async generateClassSessionsForBooking(bookingId: string) {
+    const booking = await prisma.booking.findUnique({
+      where: { booking_id: bookingId },
+      include: {
+        course: {
+          include: { schedules: { orderBy: { start_time: 'asc' } } }
+        }
+      }
+    });
+
+    if (!booking || !booking.course) return;
+    
+    const course = booking.course;
+    
     if (course.type === 'online' && course.start_date && course.end_date) {
       const schedules = course.schedules || [];
       const classSessions = [];
@@ -82,12 +100,11 @@ export const bookingService = {
       
       let curr = new Date(startDate);
       let sessionCount = 0;
-      const totalSessions = course.total_sessions || 999; // Fallback in case not set
+      const totalSessions = course.total_sessions || 999; 
 
       while (curr <= endDate && sessionCount < totalSessions) {
-        const dayOfWeek = curr.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+        const dayOfWeek = curr.getDay(); 
         
-        // Find if this day matches any of the recurring schedules
         const matchingSchedules = schedules.filter((s: any) => s.day_of_week === dayOfWeek && s.is_recurring);
         
         for (const sched of matchingSchedules) {
@@ -124,8 +141,6 @@ export const bookingService = {
         }
       }
     }
-
-    return booking;
   },
 
   // Get bookings for currently logged-in student

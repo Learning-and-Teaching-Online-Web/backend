@@ -7,6 +7,7 @@ export interface JwtUserPayload {
   userId: string;
   email: string;
   role: string;
+  full_name?: string;
 }
 
 export const jwtUtil = {

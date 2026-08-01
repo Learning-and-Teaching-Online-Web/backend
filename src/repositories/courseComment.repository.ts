@@ -16,6 +16,7 @@ export const courseCommentRepository = {
         user: {
           select: {
             user_id: true,
+            email: true,
             role: true,
             user_profile: {
               select: {
@@ -45,6 +46,7 @@ export const courseCommentRepository = {
         user: {
           select: {
             user_id: true,
+            email: true,
             role: true,
             user_profile: {
               select: {

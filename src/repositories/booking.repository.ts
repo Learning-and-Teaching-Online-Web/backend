@@ -39,6 +39,7 @@ export const bookingRepository = {
               include: {
                 user: {
                   select: {
+                    email: true,
                     user_profile: {
                       select: { full_name: true, avatar_url: true }
                     }
