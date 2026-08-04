@@ -6,8 +6,8 @@ function formatCourseUser(course) {
     if (!course)
         return course;
     if (course.tutor?.user) {
-        course.tutor.user.full_name = course.tutor.user.user_profile?.full_name || '';
-        course.tutor.user.avatar_url = course.tutor.user.user_profile?.avatar_url || null;
+        course.tutor.user.full_name = course.tutor.full_name || '';
+        course.tutor.user.avatar_url = course.tutor.avatar_url || null;
     }
     return course;
 }
@@ -21,9 +21,7 @@ exports.courseRepository = {
                     include: {
                         user: {
                             select: {
-                                user_profile: {
-                                    select: { full_name: true, avatar_url: true }
-                                }
+                                email: true
                             }
                         }
                     }
@@ -96,9 +94,7 @@ exports.courseRepository = {
                         include: {
                             user: {
                                 select: {
-                                    user_profile: {
-                                        select: { full_name: true, avatar_url: true }
-                                    }
+                                    email: true
                                 }
                             }
                         },
@@ -156,6 +152,12 @@ exports.courseRepository = {
             data: { status: 'archived' }
         });
         return data;
+    },
+    // Delete all schedules of a course
+    async deleteCourseSchedules(courseId) {
+        return await prisma_1.prisma.courseSchedule.deleteMany({
+            where: { course_id: courseId }
+        });
     },
     // Add schedule to a course
     async addSchedule(scheduleData) {

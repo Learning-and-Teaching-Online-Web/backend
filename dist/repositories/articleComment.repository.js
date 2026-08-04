@@ -4,8 +4,9 @@ exports.articleCommentRepository = void 0;
 const prisma_1 = require("../config/prisma");
 function formatCommentUser(comment) {
     if (comment?.user) {
-        comment.user.full_name = comment.user.user_profile?.full_name || '';
-        comment.user.avatar_url = comment.user.user_profile?.avatar_url || null;
+        const profile = comment.user.admin_profile || comment.user.student_profile || comment.user.tutor_profile;
+        comment.user.full_name = profile?.full_name || '';
+        comment.user.avatar_url = profile?.avatar_url || null;
     }
     return comment;
 }
@@ -17,13 +18,11 @@ exports.articleCommentRepository = {
                 user: {
                     select: {
                         user_id: true,
+                        email: true,
                         role: true,
-                        user_profile: {
-                            select: {
-                                full_name: true,
-                                avatar_url: true
-                            }
-                        }
+                        student_profile: { select: { full_name: true, avatar_url: true } },
+                        tutor_profile: { select: { full_name: true, avatar_url: true } },
+                        admin_profile: { select: { full_name: true, avatar_url: true } }
                     }
                 }
             },
@@ -43,13 +42,11 @@ exports.articleCommentRepository = {
                 user: {
                     select: {
                         user_id: true,
+                        email: true,
                         role: true,
-                        user_profile: {
-                            select: {
-                                full_name: true,
-                                avatar_url: true
-                            }
-                        }
+                        student_profile: { select: { full_name: true, avatar_url: true } },
+                        tutor_profile: { select: { full_name: true, avatar_url: true } },
+                        admin_profile: { select: { full_name: true, avatar_url: true } }
                     }
                 }
             }

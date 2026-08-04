@@ -39,10 +39,7 @@ export const bookingRepository = {
               include: {
                 user: {
                   select: {
-                    email: true,
-                    user_profile: {
-                      select: { full_name: true, avatar_url: true }
-                    }
+                    email: true
                   }
                 }
               }
@@ -56,8 +53,8 @@ export const bookingRepository = {
 
     return bookings.map((b: any) => {
       if (b.course?.tutor?.user) {
-        b.course.tutor.user.full_name = b.course.tutor.user.user_profile?.full_name || '';
-        b.course.tutor.user.avatar_url = b.course.tutor.user.user_profile?.avatar_url || null;
+        b.course.tutor.user.full_name = b.course.tutor.full_name || '';
+        b.course.tutor.user.avatar_url = b.course.tutor.avatar_url || null;
       }
       return b;
     });

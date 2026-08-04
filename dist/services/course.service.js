@@ -154,6 +154,22 @@ exports.courseService = {
         };
         return await course_repository_1.courseRepository.addSchedule(payload);
     },
+    // Delete all schedules of a course
+    async deleteCourseSchedules(userId, courseId) {
+        const tutor = await tutor_repository_1.tutorRepository.findByUserId(userId);
+        if (!tutor)
+            throw new Error('Hồ sơ gia sư không tồn tại');
+        const course = await course_repository_1.courseRepository.findById(courseId);
+        if (!course)
+            throw new Error('Không tìm thấy khóa học');
+        if (course.tutor_id !== tutor.tutor_id) {
+            throw new Error('Bạn không có quyền quản lý lịch của khóa học này');
+        }
+        if (course.status === 'published') {
+            throw new Error('Không thể xóa lịch của khóa học đã xuất bản');
+        }
+        return await course_repository_1.courseRepository.deleteCourseSchedules(courseId);
+    },
     // CourseLesson methods
     async addLesson(userId, courseId, lessonData) {
         const tutor = await tutor_repository_1.tutorRepository.findByUserId(userId);

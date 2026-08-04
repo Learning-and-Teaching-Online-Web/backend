@@ -12,6 +12,9 @@ exports.authService = {
         if (!email || !password || !fullName) {
             throw new Error('Email, mật khẩu và họ tên là bắt buộc');
         }
+        if (role === 'admin') {
+            throw new Error('Tài khoản Quản trị viên (Admin) không được đăng ký công khai');
+        }
         // Kiểm tra xem email đã tồn tại chưa
         const existingUser = await user_repository_1.userRepository.findByEmail(email);
         if (existingUser) {
@@ -30,7 +33,7 @@ exports.authService = {
             role: role || 'student'
         });
         // Tạo cặp token
-        const tokenPayload = { userId: user.user_id, email: user.email, role: user.role };
+        const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name || fullName };
         const accessToken = jwt_util_1.jwtUtil.generateAccessToken(tokenPayload);
         const refreshToken = jwt_util_1.jwtUtil.generateRefreshToken(tokenPayload);
         // Lưu Refresh Token vào CSDL (hết hạn sau 7 ngày)
@@ -63,7 +66,7 @@ exports.authService = {
             throw new Error('Email hoặc mật khẩu không chính xác');
         }
         // Tạo cặp token JWT (access_token: 2h, refresh_token: 7d)
-        const tokenPayload = { userId: user.user_id, email: user.email, role: user.role };
+        const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name };
         const accessToken = jwt_util_1.jwtUtil.generateAccessToken(tokenPayload);
         const refreshToken = jwt_util_1.jwtUtil.generateRefreshToken(tokenPayload);
         // Lưu Refresh Token vào DB

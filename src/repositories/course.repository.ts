@@ -3,8 +3,8 @@ import { prisma } from '../config/prisma';
 function formatCourseUser(course: any) {
   if (!course) return course;
   if (course.tutor?.user) {
-    course.tutor.user.full_name = course.tutor.user.user_profile?.full_name || '';
-    course.tutor.user.avatar_url = course.tutor.user.user_profile?.avatar_url || null;
+    course.tutor.user.full_name = course.tutor.full_name || '';
+    course.tutor.user.avatar_url = course.tutor.avatar_url || null;
   }
   return course;
 }
@@ -19,10 +19,7 @@ export const courseRepository = {
           include: {
             user: {
               select: {
-                email: true,
-                user_profile: {
-                  select: { full_name: true, avatar_url: true }
-                }
+                email: true
               }
             }
           }
@@ -92,10 +89,7 @@ export const courseRepository = {
             include: {
               user: {
                 select: {
-                  email: true,
-                  user_profile: {
-                    select: { full_name: true, avatar_url: true }
-                  }
+                  email: true
                 }
               }
             },

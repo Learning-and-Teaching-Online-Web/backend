@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.tutorService = void 0;
 const tutor_repository_1 = require("../repositories/tutor.repository");
+const booking_service_1 = require("./booking.service");
 exports.tutorService = {
     // Get dashboard statistics for the logged-in tutor
     async getStats(userId) {
@@ -25,7 +26,17 @@ exports.tutorService = {
         if (!tutor) {
             throw new Error('Hồ sơ gia sư không tồn tại');
         }
-        return await tutor_repository_1.tutorRepository.updateBookingStatus(bookingId, status);
+        const updated = await tutor_repository_1.tutorRepository.updateBookingStatus(bookingId, status);
+        // Auto-generate class sessions if booking is approved
+        if (status === 'confirmed') {
+            try {
+                await booking_service_1.bookingService.generateClassSessionsForBooking(bookingId);
+            }
+            catch (e) {
+                console.error("Failed to generate class sessions upon approval:", e);
+            }
+        }
+        return updated;
     },
     // Get student reviews for this tutor
     async getReviews(userId) {

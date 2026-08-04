@@ -8,21 +8,23 @@ exports.userRepository = {
         const user = await prisma_1.prisma.user.findUnique({
             where: { email },
             include: {
-                user_profile: true,
+                admin_profile: true,
                 student_profile: true,
                 tutor_profile: true
             }
         });
         if (!user)
             return null;
+        const profile = user.admin_profile || user.student_profile || user.tutor_profile;
         return {
             ...user,
-            full_name: user.user_profile?.full_name || '',
-            phone: user.user_profile?.phone || null,
-            avatar_url: user.user_profile?.avatar_url || null,
-            date_of_birth: user.user_profile?.date_of_birth || null,
-            gender: user.user_profile?.gender || null,
-            bio: user.user_profile?.bio || null
+            full_name: profile?.full_name || '',
+            phone: profile?.phone || null,
+            avatar_url: profile?.avatar_url || null,
+            date_of_birth: profile?.date_of_birth || null,
+            gender: profile?.gender || null,
+            bio: profile?.bio || null,
+            cccd: user.admin_profile?.cccd || null
         };
     },
     // Tạo mới User trực tiếp trong CSDL
@@ -35,34 +37,60 @@ exports.userRepository = {
                 role: role
             }
         });
-        await prisma_1.prisma.userProfile.upsert({
-            where: { user_id: user.user_id },
-            update: {
-                full_name: data.full_name,
-                phone: data.phone,
-                gender: data.gender,
-                date_of_birth: data.date_of_birth
-            },
-            create: {
-                user_id: user.user_id,
-                full_name: data.full_name,
-                phone: data.phone,
-                gender: data.gender,
-                date_of_birth: data.date_of_birth
-            }
-        });
         if (role === 'student') {
             await prisma_1.prisma.studentProfile.upsert({
                 where: { user_id: user.user_id },
-                update: {},
-                create: { user_id: user.user_id }
+                update: {
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    gender: data.gender,
+                    date_of_birth: data.date_of_birth
+                },
+                create: {
+                    user_id: user.user_id,
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    gender: data.gender,
+                    date_of_birth: data.date_of_birth
+                }
             });
         }
         else if (role === 'tutor') {
             await prisma_1.prisma.tutorProfile.upsert({
                 where: { user_id: user.user_id },
-                update: {},
-                create: { user_id: user.user_id }
+                update: {
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    gender: data.gender,
+                    date_of_birth: data.date_of_birth
+                },
+                create: {
+                    user_id: user.user_id,
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    gender: data.gender,
+                    date_of_birth: data.date_of_birth
+                }
+            });
+        }
+        else if (role === 'admin') {
+            await prisma_1.prisma.adminProfile.upsert({
+                where: { user_id: user.user_id },
+                update: {
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    gender: data.gender,
+                    date_of_birth: data.date_of_birth,
+                    cccd: data.cccd
+                },
+                create: {
+                    user_id: user.user_id,
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    gender: data.gender,
+                    date_of_birth: data.date_of_birth,
+                    cccd: data.cccd
+                }
             });
         }
         const fullUser = await this.findById(user.user_id);
@@ -73,7 +101,7 @@ exports.userRepository = {
         const user = await prisma_1.prisma.user.findUnique({
             where: { user_id: userId },
             include: {
-                user_profile: true,
+                admin_profile: true,
                 student_profile: true,
                 tutor_profile: true
             }
@@ -81,14 +109,16 @@ exports.userRepository = {
         if (!user) {
             throw new Error(`User with id ${userId} not found`);
         }
+        const profile = user.admin_profile || user.student_profile || user.tutor_profile;
         return {
             ...user,
-            full_name: user.user_profile?.full_name || '',
-            phone: user.user_profile?.phone || null,
-            avatar_url: user.user_profile?.avatar_url || null,
-            date_of_birth: user.user_profile?.date_of_birth || null,
-            gender: user.user_profile?.gender || null,
-            bio: user.user_profile?.bio || null,
+            full_name: profile?.full_name || '',
+            phone: profile?.phone || null,
+            avatar_url: profile?.avatar_url || null,
+            date_of_birth: profile?.date_of_birth || null,
+            gender: profile?.gender || null,
+            bio: profile?.bio || null,
+            cccd: user.admin_profile?.cccd || null,
             metadata: user.student_profile ? {
                 grade_level: user.student_profile.grade_level,
                 learning_goals: user.student_profile.learning_goals,
@@ -101,7 +131,12 @@ exports.userRepository = {
     },
     // Cập nhật thông tin user theo ID
     async updateById(userId, data) {
-        const { metadata, full_name, phone, avatar_url, ...userData } = data;
+        const { metadata, full_name, phone, avatar_url, cccd, ...userData } = data;
+        const currentUser = await prisma_1.prisma.user.findUnique({
+            where: { user_id: userId },
+            select: { role: true }
+        });
+        const role = currentUser?.role || 'student';
         const profileUpdate = {};
         if (full_name !== undefined)
             profileUpdate.full_name = full_name;
@@ -109,42 +144,68 @@ exports.userRepository = {
             profileUpdate.phone = phone;
         if (avatar_url !== undefined)
             profileUpdate.avatar_url = avatar_url;
-        if (Object.keys(profileUpdate).length > 0) {
-            await prisma_1.prisma.userProfile.upsert({
-                where: { user_id: userId },
-                update: profileUpdate,
-                create: {
-                    user_id: userId,
-                    full_name: full_name || '',
-                    phone,
-                    avatar_url
-                }
-            });
+        if (role === 'student') {
+            if (metadata) {
+                if (metadata.grade_level !== undefined)
+                    profileUpdate.grade_level = metadata.grade_level;
+                if (metadata.learning_goals !== undefined)
+                    profileUpdate.learning_goals = metadata.learning_goals;
+                if (metadata.preferred_subjects !== undefined)
+                    profileUpdate.preferred_subjects = metadata.preferred_subjects;
+                if (metadata.preferred_mode !== undefined)
+                    profileUpdate.preferred_mode = metadata.preferred_mode;
+                if (metadata.budget_max !== undefined)
+                    profileUpdate.budget_max = metadata.budget_max;
+            }
+            if (Object.keys(profileUpdate).length > 0) {
+                await prisma_1.prisma.studentProfile.upsert({
+                    where: { user_id: userId },
+                    update: profileUpdate,
+                    create: {
+                        user_id: userId,
+                        full_name: full_name || '',
+                        phone,
+                        avatar_url,
+                        ...profileUpdate
+                    }
+                });
+            }
+        }
+        else if (role === 'tutor') {
+            if (Object.keys(profileUpdate).length > 0) {
+                await prisma_1.prisma.tutorProfile.upsert({
+                    where: { user_id: userId },
+                    update: profileUpdate,
+                    create: {
+                        user_id: userId,
+                        full_name: full_name || '',
+                        phone,
+                        avatar_url
+                    }
+                });
+            }
+        }
+        else if (role === 'admin') {
+            if (cccd !== undefined)
+                profileUpdate.cccd = cccd;
+            if (Object.keys(profileUpdate).length > 0) {
+                await prisma_1.prisma.adminProfile.upsert({
+                    where: { user_id: userId },
+                    update: profileUpdate,
+                    create: {
+                        user_id: userId,
+                        full_name: full_name || '',
+                        phone,
+                        avatar_url,
+                        cccd
+                    }
+                });
+            }
         }
         if (Object.keys(userData).length > 0) {
             await prisma_1.prisma.user.update({
                 where: { user_id: userId },
                 data: userData
-            });
-        }
-        if (metadata) {
-            await prisma_1.prisma.studentProfile.upsert({
-                where: { user_id: userId },
-                update: {
-                    grade_level: metadata.grade_level,
-                    learning_goals: metadata.learning_goals,
-                    preferred_subjects: metadata.preferred_subjects,
-                    preferred_mode: metadata.preferred_mode,
-                    budget_max: metadata.budget_max
-                },
-                create: {
-                    user_id: userId,
-                    grade_level: metadata.grade_level,
-                    learning_goals: metadata.learning_goals,
-                    preferred_subjects: metadata.preferred_subjects,
-                    preferred_mode: metadata.preferred_mode,
-                    budget_max: metadata.budget_max
-                }
             });
         }
         return this.findById(userId);
