@@ -4,9 +4,11 @@ import { UserRole, UserStatus, VerificationStatus, CourseStatus, PayoutStatus } 
 function formatUserWithProfile(user: any) {
   if (!user) return user;
   const profile = user.admin_profile || user.student_profile || user.tutor_profile;
+  const rawName = profile?.full_name;
+  const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (user.email ? user.email.split('@')[0] : 'Người dùng');
   return {
     ...user,
-    full_name: profile?.full_name || '',
+    full_name: displayName,
     phone: profile?.phone || null,
     avatar_url: profile?.avatar_url || null,
     date_of_birth: profile?.date_of_birth || null,

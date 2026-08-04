@@ -5,9 +5,15 @@ const prisma_1 = require("../config/prisma");
 function formatCourseUser(course) {
     if (!course)
         return course;
-    if (course.tutor?.user) {
-        course.tutor.user.full_name = course.tutor.full_name || '';
-        course.tutor.user.avatar_url = course.tutor.avatar_url || null;
+    if (course.tutor) {
+        const displayName = (course.tutor.full_name && course.tutor.full_name !== 'Người dùng')
+            ? course.tutor.full_name
+            : (course.tutor.user?.email ? course.tutor.user.email.split('@')[0] : 'Giảng viên');
+        course.tutor.full_name = displayName;
+        if (course.tutor.user) {
+            course.tutor.user.full_name = displayName;
+            course.tutor.user.avatar_url = course.tutor.avatar_url || null;
+        }
     }
     return course;
 }

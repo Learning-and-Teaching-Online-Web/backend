@@ -6,8 +6,11 @@ const supabase_1 = require("../config/supabase");
 function formatTutorUser(tutor) {
     if (!tutor)
         return tutor;
+    const rawName = tutor.full_name;
+    const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (tutor.user?.email ? tutor.user.email.split('@')[0] : 'Giảng viên');
+    tutor.full_name = displayName;
     if (tutor.user) {
-        tutor.user.full_name = tutor.full_name || '';
+        tutor.user.full_name = displayName;
         tutor.user.avatar_url = tutor.avatar_url || null;
         tutor.user.phone = tutor.phone || null;
         tutor.user.bio = tutor.bio || null;

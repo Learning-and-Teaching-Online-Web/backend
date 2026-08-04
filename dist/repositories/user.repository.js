@@ -16,9 +16,11 @@ exports.userRepository = {
         if (!user)
             return null;
         const profile = user.admin_profile || user.student_profile || user.tutor_profile;
+        const rawName = profile?.full_name;
+        const displayName = (rawName && rawName !== 'Người dùng') ? rawName : email.split('@')[0];
         return {
             ...user,
-            full_name: profile?.full_name || '',
+            full_name: displayName,
             phone: profile?.phone || null,
             avatar_url: profile?.avatar_url || null,
             date_of_birth: profile?.date_of_birth || null,
