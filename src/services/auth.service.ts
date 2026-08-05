@@ -12,6 +12,10 @@ export const authService = {
       throw new Error('Email, mật khẩu và họ tên là bắt buộc');
     }
 
+    if (role === 'admin') {
+      throw new Error('Tài khoản Quản trị viên (Admin) không được đăng ký công khai');
+    }
+
     // Kiểm tra xem email đã tồn tại chưa
     const existingUser = await userRepository.findByEmail(email);
     if (existingUser) {
@@ -75,7 +79,7 @@ export const authService = {
     }
 
     // Tạo cặp token JWT (access_token: 2h, refresh_token: 7d)
-    const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name || user.user_profile?.full_name };
+    const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name };
     const accessToken = jwtUtil.generateAccessToken(tokenPayload);
     const refreshToken = jwtUtil.generateRefreshToken(tokenPayload);
 

@@ -34,7 +34,7 @@ const verifyAuth = async (req, res, next) => {
             role: decoded.role,
             user_metadata: {
                 role: decoded.role,
-                full_name: decoded.email ? decoded.email.split('@')[0] : ''
+                full_name: decoded.full_name || (decoded.email ? decoded.email.split('@')[0] : '')
             }
         };
         authReq.token = token;

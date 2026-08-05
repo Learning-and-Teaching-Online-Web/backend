@@ -4,6 +4,7 @@ exports.bookingService = void 0;
 const booking_repository_1 = require("../repositories/booking.repository");
 const course_repository_1 = require("../repositories/course.repository");
 const user_repository_1 = require("../repositories/user.repository");
+const prisma_1 = require("../config/prisma");
 exports.bookingService = {
     // Create a new booking (Supports Online & Offline courses)
     async createBooking(userId, courseId, scheduleId, notes) {
@@ -44,8 +45,8 @@ exports.bookingService = {
             student_id: student.student_id,
             course_id: courseId,
             schedule_id: finalScheduleId,
-            status: 'confirmed', // MVP Bypass ZaloPay: Auto set to confirmed
-            payment_status: 'paid', // MVP Bypass ZaloPay: Auto set to paid
+            status: 'pending', // MVP: Tutor must manually approve
+            payment_status: 'unpaid', // MVP: Payment pending
             total_amount: Number(course.price),
             currency: 'VND',
             notes: notes || ''
@@ -68,7 +69,21 @@ exports.bookingService = {
                 console.error("Warning: Failed to mark schedule as booked:", schedError);
             }
         }
-        // 8. Auto-generate ClassSessions for Online Course based on Fixed Schedules
+        return booking;
+    },
+    // Auto-generate ClassSessions for Online Course when Tutor approves booking
+    async generateClassSessionsForBooking(bookingId) {
+        const booking = await prisma_1.prisma.booking.findUnique({
+            where: { booking_id: bookingId },
+            include: {
+                course: {
+                    include: { schedules: { orderBy: { start_time: 'asc' } } }
+                }
+            }
+        });
+        if (!booking || !booking.course)
+            return;
+        const course = booking.course;
         if (course.type === 'online' && course.start_date && course.end_date) {
             const schedules = course.schedules || [];
             const classSessions = [];
@@ -76,10 +91,9 @@ exports.bookingService = {
             const endDate = new Date(course.end_date);
             let curr = new Date(startDate);
             let sessionCount = 0;
-            const totalSessions = course.total_sessions || 999; // Fallback in case not set
+            const totalSessions = course.total_sessions || 999;
             while (curr <= endDate && sessionCount < totalSessions) {
-                const dayOfWeek = curr.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-                // Find if this day matches any of the recurring schedules
+                const dayOfWeek = curr.getDay();
                 const matchingSchedules = schedules.filter((s) => s.day_of_week === dayOfWeek && s.is_recurring);
                 for (const sched of matchingSchedules) {
                     if (sessionCount >= totalSessions)
@@ -111,7 +125,6 @@ exports.bookingService = {
                 }
             }
         }
-        return booking;
     },
     // Get bookings for currently logged-in student
     async getMyBookings(userId) {

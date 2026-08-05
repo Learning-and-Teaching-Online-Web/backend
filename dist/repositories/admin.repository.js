@@ -5,14 +5,18 @@ const prisma_1 = require("../config/prisma");
 function formatUserWithProfile(user) {
     if (!user)
         return user;
+    const profile = user.admin_profile || user.student_profile || user.tutor_profile;
+    const rawName = profile?.full_name;
+    const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (user.email ? user.email.split('@')[0] : 'Người dùng');
     return {
         ...user,
-        full_name: user.user_profile?.full_name || '',
-        phone: user.user_profile?.phone || null,
-        avatar_url: user.user_profile?.avatar_url || null,
-        date_of_birth: user.user_profile?.date_of_birth || null,
-        gender: user.user_profile?.gender || null,
-        bio: user.user_profile?.bio || null
+        full_name: displayName,
+        phone: profile?.phone || null,
+        avatar_url: profile?.avatar_url || null,
+        date_of_birth: profile?.date_of_birth || null,
+        gender: profile?.gender || null,
+        bio: profile?.bio || null,
+        cccd: user.admin_profile?.cccd || null
     };
 }
 exports.adminRepository = {
@@ -34,13 +38,7 @@ exports.adminRepository = {
             include: {
                 user: {
                     select: {
-                        email: true,
-                        user_profile: {
-                            select: {
-                                full_name: true,
-                                avatar_url: true
-                            }
-                        }
+                        email: true
                     }
                 }
             }
@@ -68,9 +66,9 @@ exports.adminRepository = {
             },
             topTutors: topTutors.map(t => ({
                 tutor_id: t.tutor_id,
-                name: t.user?.user_profile?.full_name || 'N/A',
+                name: t.full_name || t.user?.email || 'N/A',
                 email: t.user?.email || 'N/A',
-                avatar_url: t.user?.user_profile?.avatar_url || null,
+                avatar_url: t.avatar_url || null,
                 rating: t.rating ? Number(t.rating) : 0,
                 experience_years: t.experience_years || 0
             }))
@@ -90,7 +88,9 @@ exports.adminRepository = {
         }
         if (filters.search) {
             whereClause.OR = [
-                { user_profile: { full_name: { contains: filters.search, mode: 'insensitive' } } },
+                { student_profile: { full_name: { contains: filters.search, mode: 'insensitive' } } },
+                { tutor_profile: { full_name: { contains: filters.search, mode: 'insensitive' } } },
+                { admin_profile: { full_name: { contains: filters.search, mode: 'insensitive' } } },
                 { email: { contains: filters.search, mode: 'insensitive' } }
             ];
         }
@@ -98,7 +98,7 @@ exports.adminRepository = {
             prisma_1.prisma.user.findMany({
                 where: whereClause,
                 include: {
-                    user_profile: true,
+                    admin_profile: true,
                     student_profile: true,
                     tutor_profile: {
                         include: {
@@ -140,6 +140,13 @@ exports.adminRepository = {
                 update: {}
             });
         }
+        else if (role === 'admin') {
+            await prisma_1.prisma.adminProfile.upsert({
+                where: { user_id: userId },
+                create: { user_id: userId, full_name: 'Admin' },
+                update: {}
+            });
+        }
         return updatedUser;
     },
     // 3. Tutor Profile & Certificate Verification
@@ -157,14 +164,7 @@ exports.adminRepository = {
                 include: {
                     user: {
                         select: {
-                            email: true,
-                            user_profile: {
-                                select: {
-                                    full_name: true,
-                                    avatar_url: true,
-                                    phone: true
-                                }
-                            }
+                            email: true
                         }
                     },
                     certificates: true
@@ -177,9 +177,9 @@ exports.adminRepository = {
         ]);
         const mappedTutors = tutors.map((t) => {
             if (t.user) {
-                t.user.full_name = t.user.user_profile?.full_name || '';
-                t.user.avatar_url = t.user.user_profile?.avatar_url || null;
-                t.user.phone = t.user.user_profile?.phone || null;
+                t.user.full_name = t.full_name || '';
+                t.user.avatar_url = t.avatar_url || null;
+                t.user.phone = t.phone || null;
             }
             return t;
         });
@@ -247,13 +247,7 @@ exports.adminRepository = {
                         include: {
                             user: {
                                 select: {
-                                    email: true,
-                                    user_profile: {
-                                        select: {
-                                            full_name: true,
-                                            avatar_url: true
-                                        }
-                                    }
+                                    email: true
                                 }
                             }
                         }
@@ -267,8 +261,8 @@ exports.adminRepository = {
         ]);
         const mappedCourses = courses.map((c) => {
             if (c.tutor?.user) {
-                c.tutor.user.full_name = c.tutor.user.user_profile?.full_name || '';
-                c.tutor.user.avatar_url = c.tutor.user.user_profile?.avatar_url || null;
+                c.tutor.user.full_name = c.tutor.full_name || '';
+                c.tutor.user.avatar_url = c.tutor.avatar_url || null;
             }
             return c;
         });
@@ -291,9 +285,9 @@ exports.adminRepository = {
                     user: {
                         select: {
                             email: true,
-                            user_profile: {
-                                select: { full_name: true }
-                            }
+                            student_profile: { select: { full_name: true } },
+                            tutor_profile: { select: { full_name: true } },
+                            admin_profile: { select: { full_name: true } }
                         }
                     },
                     booking: {
@@ -314,7 +308,8 @@ exports.adminRepository = {
         ]);
         const mappedTransactions = transactions.map((t) => {
             if (t.user) {
-                t.user.full_name = t.user.user_profile?.full_name || '';
+                const profile = t.user.admin_profile || t.user.student_profile || t.user.tutor_profile;
+                t.user.full_name = profile?.full_name || '';
             }
             return t;
         });
@@ -336,10 +331,7 @@ exports.adminRepository = {
                         include: {
                             user: {
                                 select: {
-                                    email: true,
-                                    user_profile: {
-                                        select: { full_name: true }
-                                    }
+                                    email: true
                                 }
                             }
                         }
@@ -353,7 +345,7 @@ exports.adminRepository = {
         ]);
         const mappedPayouts = payouts.map((p) => {
             if (p.tutor?.user) {
-                p.tutor.user.full_name = p.tutor.user.user_profile?.full_name || '';
+                p.tutor.user.full_name = p.tutor.full_name || '';
             }
             return p;
         });

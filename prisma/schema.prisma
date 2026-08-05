@@ -46,7 +46,7 @@ model User {
   last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
 
   // Relations
-  user_profile       UserProfile?
+  admin_profile      AdminProfile?
   tutor_profile      TutorProfile?
   student_profile    StudentProfile?
   wallets            Wallet?
@@ -71,25 +71,26 @@ model User {
 }
 
 // ================================================================
-// BẢNG: user_profiles
-// Mô tả: Lưu thông tin cá nhân dùng chung của tất cả người dùng (Học sinh, Gia sư, Admin).
+// BẢNG: admin_profiles
+// Mô tả: Lưu thông tin cá nhân của Quản trị viên (Admin).
 // Quan hệ: 1-1 với users (user_id @unique).
 // ================================================================
-model UserProfile {
-  profile_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
+model AdminProfile {
+  admin_id      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
   user_id       String    @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
   full_name     String    // Họ và tên đầy đủ
   phone         String?   // Số điện thoại liên hệ
-  avatar_url    String?   // Đường dẫn ảnh đại diện (lưu trên CDN/Cloud Storage)
-  date_of_birth DateTime? @db.Date // Ngày tháng năm sinh (chỉ lưu ngày)
+  avatar_url    String?   // Đường dẫn ảnh đại diện
+  date_of_birth DateTime? @db.Date // Ngày tháng năm sinh
   gender        String?   // Giới tính ("male" | "female" | "other")
   bio           String?   // Tiểu sử/Giới thiệu ngắn về bản thân
+  cccd          String?   // Căn cước công dân
   created_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
   updated_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
-  @@map("user_profiles")
+  @@map("admin_profiles")
 }
 
 
@@ -159,6 +160,11 @@ enum VerificationStatus {
 model TutorProfile {
   tutor_id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho hồ sơ gia sư
   user_id          String             @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
+  full_name        String             @default("") // Họ và tên đầy đủ
+  phone            String?            // Số điện thoại liên hệ
+  avatar_url       String?            // Đường dẫn ảnh đại diện
+  date_of_birth    DateTime?          @db.Date // Ngày tháng năm sinh
+  gender           String?            // Giới tính ("male" | "female" | "other")
   bio              String?            // Giới thiệu chuyên môn & phương pháp giảng dạy
   education        String?            // Trình độ học vấn (VD: Thạc sĩ Toán học - ĐH Sư Phạm)
   experience_years Int?               @default(0) @db.SmallInt // Số năm kinh nghiệm dạy học (SmallInt tiết kiệm bộ nhớ)
@@ -200,6 +206,12 @@ model TutorProfile {
 model StudentProfile {
   student_id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho hồ sơ học sinh
   user_id            String        @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
+  full_name          String        @default("") // Họ và tên đầy đủ
+  phone              String?       // Số điện thoại liên hệ
+  avatar_url         String?       // Đường dẫn ảnh đại diện
+  date_of_birth      DateTime?     @db.Date // Ngày tháng năm sinh
+  gender             String?       // Giới tính ("male" | "female" | "other")
+  bio                String?       // Tiểu sử/Giới thiệu ngắn về bản thân
   grade_level        String?       // Cấp học hiện tại (VD: Lớp 10, Đại học năm 2, Người đi làm...)
   learning_goals     String?       // Mục tiêu học tập (VD: Ôn thi ĐH top đầu, Lấy bằng IELTS 7.0)
   preferred_subjects Json?         @default("[]") // Mảng JSON các môn muốn học (VD: ["Hóa học", "Tiếng Anh"])

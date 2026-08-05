@@ -70,6 +70,23 @@ exports.courseController = {
             res.status(400).json({ success: false, error: error.message || error });
         }
     },
+    // Delete all schedules of a course
+    async deleteSchedules(req, res) {
+        try {
+            const userId = req.user?.id;
+            const courseId = req.params.id;
+            if (!userId) {
+                res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+                return;
+            }
+            await course_service_1.courseService.deleteCourseSchedules(userId, courseId);
+            res.status(200).json({ success: true, message: 'Xóa lịch dạy thành công' });
+        }
+        catch (error) {
+            console.error('Error in deleteSchedules controller:', error);
+            res.status(400).json({ success: false, error: error.message || error });
+        }
+    },
     // Add lesson to a course
     async addLesson(req, res) {
         try {

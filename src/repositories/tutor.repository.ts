@@ -3,12 +3,14 @@ import { supabaseAdmin } from '../config/supabase';
 
 function formatTutorUser(tutor: any) {
   if (!tutor) return tutor;
+  const rawName = tutor.full_name;
+  const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (tutor.user?.email ? tutor.user.email.split('@')[0] : 'Giảng viên');
+  tutor.full_name = displayName;
   if (tutor.user) {
-    const profile = tutor.user.user_profile;
-    tutor.user.full_name = profile?.full_name || '';
-    tutor.user.avatar_url = profile?.avatar_url || null;
-    tutor.user.phone = profile?.phone || null;
-    tutor.user.bio = profile?.bio || null;
+    tutor.user.full_name = displayName;
+    tutor.user.avatar_url = tutor.avatar_url || null;
+    tutor.user.phone = tutor.phone || null;
+    tutor.user.bio = tutor.bio || null;
   }
   return tutor;
 }
@@ -21,10 +23,7 @@ export const tutorRepository = {
       include: {
         user: {
           select: {
-            email: true,
-            user_profile: {
-              select: { full_name: true, avatar_url: true, phone: true, bio: true }
-            }
+            email: true
           }
         }
       }
@@ -39,10 +38,7 @@ export const tutorRepository = {
       include: {
         user: {
           select: {
-            email: true,
-            user_profile: {
-              select: { full_name: true, avatar_url: true, phone: true, bio: true }
-            }
+            email: true
           }
         }
       }
@@ -63,10 +59,7 @@ export const tutorRepository = {
       include: {
         user: {
           select: {
-            email: true,
-            user_profile: {
-              select: { full_name: true, avatar_url: true, phone: true, bio: true }
-            }
+            email: true
           }
         }
       }
@@ -134,10 +127,7 @@ export const tutorRepository = {
           include: {
             user: {
               select: {
-                email: true,
-                user_profile: {
-                  select: { full_name: true, avatar_url: true }
-                }
+                email: true
               }
             }
           }
@@ -161,8 +151,8 @@ export const tutorRepository = {
 
     return bookings.map((b: any) => {
       if (b.student?.user) {
-        b.student.user.full_name = b.student.user.user_profile?.full_name || '';
-        b.student.user.avatar_url = b.student.user.user_profile?.avatar_url || null;
+        b.student.user.full_name = b.student.full_name || '';
+        b.student.user.avatar_url = b.student.avatar_url || null;
       }
       return b;
     });
@@ -242,10 +232,7 @@ export const tutorRepository = {
           include: {
             user: {
               select: {
-                email: true,
-                user_profile: {
-                  select: { full_name: true, avatar_url: true }
-                }
+                email: true
               }
             }
           }
@@ -267,8 +254,8 @@ export const tutorRepository = {
 
     return reviews.map((r: any) => {
       if (r.student?.user) {
-        r.student.user.full_name = r.student.user.user_profile?.full_name || '';
-        r.student.user.avatar_url = r.student.user.user_profile?.avatar_url || null;
+        r.student.user.full_name = r.student.full_name || '';
+        r.student.user.avatar_url = r.student.avatar_url || null;
       }
       return r;
     });
@@ -359,10 +346,7 @@ export const tutorRepository = {
         },
         user: {
           select: {
-            email: true,
-            user_profile: {
-              select: { full_name: true, phone: true, avatar_url: true, bio: true }
-            }
+            email: true
           }
         }
       }
@@ -381,10 +365,7 @@ export const tutorRepository = {
           },
           user: {
             select: {
-              email: true,
-              user_profile: {
-                select: { full_name: true, phone: true, avatar_url: true, bio: true }
-              }
+              email: true
             }
           }
         }
@@ -396,6 +377,9 @@ export const tutorRepository = {
 
   // Update tutor profile fields
   async updateMyProfile(userId: string, data: {
+    fullName?: string;
+    phone?: string;
+    avatarUrl?: string;
     bio?: string;
     education?: string;
     experience_years?: number;
@@ -407,39 +391,33 @@ export const tutorRepository = {
   }) {
     const tutor = await this.getMyProfile(userId);
 
+    const updatePayload: any = {};
+    if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
+    if (data.phone !== undefined) updatePayload.phone = data.phone;
+    if (data.avatarUrl !== undefined) updatePayload.avatar_url = data.avatarUrl;
+    if (data.bio !== undefined) updatePayload.bio = data.bio;
+    if (data.education !== undefined) updatePayload.education = data.education;
+    if (data.experience_years !== undefined) updatePayload.experience_years = Number(data.experience_years);
+    if (data.hourly_rate !== undefined) updatePayload.hourly_rate = Number(data.hourly_rate);
+    if (data.specialties !== undefined) updatePayload.specialties = data.specialties;
+    if (data.teaching_mode !== undefined) updatePayload.teaching_mode = data.teaching_mode;
+    if (data.province !== undefined) updatePayload.province = data.province;
+    if (data.district !== undefined) updatePayload.district = data.district;
+
     const updatedProfile = await prisma.tutorProfile.update({
       where: { tutor_id: tutor.tutor_id },
-      data: {
-        education: data.education !== undefined ? data.education : tutor.education,
-        experience_years: data.experience_years !== undefined ? Number(data.experience_years) : tutor.experience_years,
-        hourly_rate: data.hourly_rate !== undefined ? Number(data.hourly_rate) : tutor.hourly_rate,
-        specialties: data.specialties !== undefined ? data.specialties : tutor.specialties,
-        teaching_mode: data.teaching_mode !== undefined ? data.teaching_mode : tutor.teaching_mode,
-        province: data.province !== undefined ? data.province : tutor.province,
-        district: data.district !== undefined ? data.district : tutor.district
-      },
+      data: updatePayload,
       include: {
         certificates: {
           orderBy: { created_at: 'desc' }
         },
         user: {
           select: {
-            email: true,
-            user_profile: {
-              select: { full_name: true, phone: true, avatar_url: true, bio: true }
-            }
+            email: true
           }
         }
       }
     });
-
-    if (data.bio !== undefined) {
-      await (prisma.userProfile as any).upsert({
-        where: { user_id: userId },
-        update: { bio: data.bio },
-        create: { user_id: userId, full_name: '', bio: data.bio }
-      });
-    }
 
     return formatTutorUser(updatedProfile);
   },
@@ -541,7 +519,6 @@ export const tutorRepository = {
 
   // Get ClassSessions for a tutor via their courses and bookings
   async getClassSessions(tutorId: string) {
-    // We want all ClassSessions that belong to a booking that belongs to a course owned by the tutor
     const sessions = await prisma.classSession.findMany({
       where: {
         booking: {
@@ -554,17 +531,7 @@ export const tutorRepository = {
         booking: {
           include: {
             course: true,
-            student: {
-              include: {
-                user: {
-                  select: {
-                    user_profile: {
-                      select: { full_name: true }
-                    }
-                  }
-                }
-              }
-            }
+            student: true
           }
         }
       },
@@ -579,7 +546,7 @@ export const tutorRepository = {
       status: s.status,
       room_id: s.room_id,
       course_title: s.booking?.course?.title || '',
-      student_name: s.booking?.student?.user?.user_profile?.full_name || 'Học sinh'
+      student_name: s.booking?.student?.full_name || 'Học sinh'
     }));
   }
 };

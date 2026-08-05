@@ -49,12 +49,7 @@ exports.favoriteRepository = {
                     include: {
                         user: {
                             select: {
-                                user_profile: {
-                                    select: {
-                                        full_name: true,
-                                        avatar_url: true
-                                    }
-                                }
+                                email: true
                             }
                         }
                     }
@@ -63,8 +58,8 @@ exports.favoriteRepository = {
         });
         return favorites.map((f) => {
             if (f.tutor?.user) {
-                f.tutor.user.full_name = f.tutor.user.user_profile?.full_name || '';
-                f.tutor.user.avatar_url = f.tutor.user.user_profile?.avatar_url || null;
+                f.tutor.user.full_name = f.tutor.full_name || '';
+                f.tutor.user.avatar_url = f.tutor.avatar_url || null;
             }
             return f;
         });

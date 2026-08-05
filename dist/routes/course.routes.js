@@ -30,4 +30,5 @@ courseRoutes.patch('/:id', auth_middleware_1.verifyAuth, auth_middleware_1.requi
 courseRoutes.delete('/:id', auth_middleware_1.verifyAuth, auth_middleware_1.requireApprovedTutor, course_controller_1.courseController.delete);
 // Schedule routes
 courseRoutes.post('/:id/schedules', auth_middleware_1.verifyAuth, auth_middleware_1.requireApprovedTutor, course_controller_1.courseController.addSchedule);
+courseRoutes.delete('/:id/schedules', auth_middleware_1.verifyAuth, auth_middleware_1.requireApprovedTutor, course_controller_1.courseController.deleteSchedules);
 exports.default = courseRoutes;
