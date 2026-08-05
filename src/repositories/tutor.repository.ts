@@ -10,10 +10,10 @@ function formatTutorUser(tutor: any) {
     tutor.user.full_name = displayName;
     tutor.user.avatar_url = tutor.avatar_url || null;
     tutor.user.phone = tutor.phone || null;
-    tutor.user.bio = tutor.bio || null;
   }
   return tutor;
 }
+
 
 export const tutorRepository = {
 
@@ -353,12 +353,30 @@ export const tutorRepository = {
     });
 
     if (!profile) {
+      const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
       // Auto-create tutor profile if missing for tutor role
       profile = await prisma.tutorProfile.create({
         data: {
           user_id: userId,
+          tutor_code: generatedCode,
           verified_status: 'pending'
         },
+        include: {
+          certificates: {
+            orderBy: { created_at: 'desc' }
+          },
+          user: {
+            select: {
+              email: true
+            }
+          }
+        }
+      });
+    } else if (!profile.tutor_code) {
+      const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
+      profile = await prisma.tutorProfile.update({
+        where: { user_id: userId },
+        data: { tutor_code: generatedCode },
         include: {
           certificates: {
             orderBy: { created_at: 'desc' }
@@ -375,19 +393,24 @@ export const tutorRepository = {
     return formatTutorUser(profile);
   },
 
+
   // Update tutor profile fields
   async updateMyProfile(userId: string, data: {
     fullName?: string;
     phone?: string;
     avatarUrl?: string;
-    bio?: string;
-    education?: string;
+    hometown?: string;
+    current_address?: string;
+    id_card_front_url?: string;
+    university?: string;
+    major?: string;
+    graduation_year?: number;
+    current_role?: string;
+    grades?: any;
+    available_times?: any;
+    min_salary_requirement?: string;
     experience_years?: number;
-    hourly_rate?: number;
-    specialties?: any;
     teaching_mode?: any;
-    province?: string;
-    district?: string;
   }) {
     const tutor = await this.getMyProfile(userId);
 
@@ -395,14 +418,20 @@ export const tutorRepository = {
     if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
     if (data.phone !== undefined) updatePayload.phone = data.phone;
     if (data.avatarUrl !== undefined) updatePayload.avatar_url = data.avatarUrl;
-    if (data.bio !== undefined) updatePayload.bio = data.bio;
-    if (data.education !== undefined) updatePayload.education = data.education;
+    if (data.hometown !== undefined) updatePayload.hometown = data.hometown;
+    if (data.current_address !== undefined) updatePayload.current_address = data.current_address;
+    if (data.id_card_front_url !== undefined) updatePayload.id_card_front_url = data.id_card_front_url;
+    if (data.university !== undefined) updatePayload.university = data.university;
+    if (data.major !== undefined) updatePayload.major = data.major;
+    if (data.graduation_year !== undefined) updatePayload.graduation_year = Number(data.graduation_year);
+    if (data.current_role !== undefined) updatePayload.current_role = data.current_role;
+    if (data.grades !== undefined) updatePayload.grades = data.grades;
+
+    if (data.available_times !== undefined) updatePayload.available_times = data.available_times;
+    if (data.min_salary_requirement !== undefined) updatePayload.min_salary_requirement = data.min_salary_requirement;
     if (data.experience_years !== undefined) updatePayload.experience_years = Number(data.experience_years);
-    if (data.hourly_rate !== undefined) updatePayload.hourly_rate = Number(data.hourly_rate);
-    if (data.specialties !== undefined) updatePayload.specialties = data.specialties;
     if (data.teaching_mode !== undefined) updatePayload.teaching_mode = data.teaching_mode;
-    if (data.province !== undefined) updatePayload.province = data.province;
-    if (data.district !== undefined) updatePayload.district = data.district;
+
 
     const updatedProfile = await prisma.tutorProfile.update({
       where: { tutor_id: tutor.tutor_id },
@@ -421,6 +450,7 @@ export const tutorRepository = {
 
     return formatTutorUser(updatedProfile);
   },
+
 
   // Add new certificate for tutor
   async addCertificate(tutorId: string, data: {
@@ -517,36 +547,9 @@ export const tutorRepository = {
     return true;
   },
 
-  // Get ClassSessions for a tutor via their courses and bookings
-  async getClassSessions(tutorId: string) {
-    const sessions = await prisma.classSession.findMany({
-      where: {
-        booking: {
-          course: {
-            tutor_id: tutorId
-          }
-        }
-      },
-      include: {
-        booking: {
-          include: {
-            course: true,
-            student: true
-          }
-        }
-      },
-      orderBy: { scheduled_start: 'asc' }
-    });
-
-    return sessions.map((s: any) => ({
-      session_id: s.session_id,
-      title: s.title,
-      scheduled_start: s.scheduled_start,
-      scheduled_end: s.scheduled_end,
-      status: s.status,
-      room_id: s.room_id,
-      course_title: s.booking?.course?.title || '',
-      student_name: s.booking?.student?.full_name || 'Học sinh'
-    }));
+  // Get ClassSessions (Tạm thời không dùng)
+  async getClassSessions(_tutorId: string) {
+    return [];
   }
 };
+

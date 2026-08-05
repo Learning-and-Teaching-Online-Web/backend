@@ -9,6 +9,8 @@ import quizRoutes from './quiz.routes';
 import reviewRoutes from './review.routes';
 import tutorRoutes from './tutor.routes';
 import adminRoutes from './admin.routes';
+import classRequestRoutes from './classRequest.routes';
+import referencePriceRoutes from './referencePrice.routes';
 
 const rootRouter = Router();
 
@@ -22,5 +24,7 @@ rootRouter.use('/quizzes', quizRoutes);
 rootRouter.use('/reviews', reviewRoutes);
 rootRouter.use('/tutors', tutorRoutes);
 rootRouter.use('/admin', adminRoutes);
+rootRouter.use('/class-requests', classRequestRoutes);
+rootRouter.use('/reference-prices', referencePriceRoutes);
 
-export default rootRouter;
+export default rootRouter;

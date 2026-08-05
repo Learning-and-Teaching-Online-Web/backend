@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { adminController } from '../controllers/admin.controller';
+import { classRequestController } from '../controllers/classRequest.controller';
 import { verifyAuth, requireRole } from '../middlewares/auth.middleware';
+
 
 const adminRoutes = Router();
 
@@ -31,4 +33,10 @@ adminRoutes.get('/transactions', adminController.getTransactions);
 adminRoutes.get('/payouts', adminController.getPayouts);
 adminRoutes.patch('/payouts/:payoutId/status', adminController.updatePayoutStatus);
 
+// 6. Offline Class Requests management
+adminRoutes.get('/class-requests', classRequestController.adminGetAll);
+adminRoutes.patch('/class-requests/:id/approve-open', classRequestController.adminApproveOpen);
+adminRoutes.patch('/class-requests/:id/assign-tutor', classRequestController.adminAssignTutor);
+
 export default adminRoutes;
+

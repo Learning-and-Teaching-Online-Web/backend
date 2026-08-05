@@ -69,6 +69,7 @@ export const userRepository = {
         }
       });
     } else if (role === 'tutor') {
+      const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
       await (prisma.tutorProfile as any).upsert({
         where: { user_id: user.user_id },
         update: {
@@ -79,12 +80,14 @@ export const userRepository = {
         },
         create: {
           user_id: user.user_id,
+          tutor_code: generatedCode,
           full_name: data.full_name,
           phone: data.phone,
           gender: data.gender,
           date_of_birth: data.date_of_birth
         }
       });
+
     } else if (role === 'admin') {
       await (prisma.adminProfile as any).upsert({
         where: { user_id: user.user_id },
@@ -134,15 +137,12 @@ export const userRepository = {
       avatar_url: profile?.avatar_url || null,
       date_of_birth: profile?.date_of_birth || null,
       gender: profile?.gender || null,
-      bio: profile?.bio || null,
-      cccd: user.admin_profile?.cccd || null,
       metadata: user.student_profile ? {
+        address_detail: user.student_profile.address_detail,
+        province: user.student_profile.province,
+        district: user.student_profile.district,
         grade_level: user.student_profile.grade_level,
-        learning_goals: user.student_profile.learning_goals,
-        preferred_subjects: user.student_profile.preferred_subjects,
-        preferred_mode: user.student_profile.preferred_mode,
-        budget_min: user.student_profile.budget_min,
-        budget_max: user.student_profile.budget_max
+        academic_level: user.student_profile.academic_level,
       } : undefined
     };
   },
@@ -165,12 +165,16 @@ export const userRepository = {
 
     if (role === 'student') {
       if (metadata) {
+        if (metadata.address_detail !== undefined) profileUpdate.address_detail = metadata.address_detail;
+        if (metadata.province !== undefined) profileUpdate.province = metadata.province;
+        if (metadata.district !== undefined) profileUpdate.district = metadata.district;
         if (metadata.grade_level !== undefined) profileUpdate.grade_level = metadata.grade_level;
-        if (metadata.learning_goals !== undefined) profileUpdate.learning_goals = metadata.learning_goals;
-        if (metadata.preferred_subjects !== undefined) profileUpdate.preferred_subjects = metadata.preferred_subjects;
-        if (metadata.preferred_mode !== undefined) profileUpdate.preferred_mode = metadata.preferred_mode;
-        if (metadata.budget_max !== undefined) profileUpdate.budget_max = metadata.budget_max;
+        if (metadata.academic_level !== undefined) profileUpdate.academic_level = metadata.academic_level;
       }
+
+
+
+
       if (Object.keys(profileUpdate).length > 0) {
         await (prisma.studentProfile as any).upsert({
           where: { user_id: userId },
