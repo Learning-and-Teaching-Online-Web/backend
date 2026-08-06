@@ -36,6 +36,28 @@ export const tutorRepository = {
     const data = await prisma.tutorProfile.findUnique({
       where: { tutor_id: tutorId },
       include: {
+        certificates: {
+          orderBy: { created_at: 'desc' }
+        },
+        grades: {
+          include: {
+            grade: true
+          }
+        },
+        courses: {
+          where: { status: 'published' },
+          select: {
+            course_id: true,
+            title: true,
+            type: true,
+            price: true,
+            level: true,
+            total_sessions: true,
+            duration_minutes: true,
+            thumbnail_url: true,
+            created_at: true
+          }
+        },
         user: {
           select: {
             email: true
@@ -44,7 +66,42 @@ export const tutorRepository = {
       }
     });
 
-    return formatTutorUser(data);
+    if (!data) return null;
+
+    const result = formatTutorUser(data);
+
+    // Lấy danh sách các lớp offline (ClassRequest) từ database mà gia sư được giao, được học viên chọn, hoặc đã ứng tuyển
+    try {
+      const offlineClasses = await prisma.classRequest.findMany({
+        where: {
+          OR: [
+            { assigned_tutor_id: tutorId },
+            { selected_tutor_id: tutorId },
+            { applications: { some: { tutor_id: tutorId } } }
+          ]
+        },
+        include: {
+          student: {
+            select: {
+              full_name: true,
+              avatar_url: true
+            }
+          },
+          grade: {
+            select: {
+              name: true
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' }
+      });
+      (result as any).offline_classes = offlineClasses || [];
+    } catch (err) {
+      console.error('Error fetching offline classes for tutor:', err);
+      (result as any).offline_classes = [];
+    }
+
+    return result;
   },
 
   async findAll() {
@@ -409,22 +466,43 @@ export const tutorRepository = {
     const tutor = await this.getMyProfile(userId);
 
     const updatePayload: any = {};
-    if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
+    if (data.fullName !== undefined || (data as any).full_name !== undefined) {
+      updatePayload.full_name = data.fullName || (data as any).full_name;
+    }
     if (data.phone !== undefined) updatePayload.phone = data.phone;
-    if (data.avatarUrl !== undefined) updatePayload.avatar_url = data.avatarUrl;
+    if (data.avatarUrl !== undefined || (data as any).avatar_url !== undefined) {
+      updatePayload.avatar_url = data.avatarUrl || (data as any).avatar_url;
+    }
+    if ((data as any).dateOfBirth !== undefined || (data as any).date_of_birth !== undefined) {
+      const dob = (data as any).dateOfBirth || (data as any).date_of_birth;
+      updatePayload.date_of_birth = dob ? new Date(dob) : null;
+    }
+    if ((data as any).gender !== undefined) updatePayload.gender = (data as any).gender;
     if (data.hometown !== undefined) updatePayload.hometown = data.hometown;
-    if (data.current_address !== undefined) updatePayload.current_address = data.current_address;
+    if (data.current_address !== undefined || (data as any).currentAddress !== undefined) {
+      updatePayload.current_address = data.current_address || (data as any).currentAddress;
+    }
     if (data.id_card_front_url !== undefined) updatePayload.id_card_front_url = data.id_card_front_url;
     if (data.university !== undefined) updatePayload.university = data.university;
     if (data.major !== undefined) updatePayload.major = data.major;
-    if (data.graduation_year !== undefined) updatePayload.graduation_year = Number(data.graduation_year);
-    if (data.current_role !== undefined) updatePayload.current_role = data.current_role;
+    if (data.graduation_year !== undefined || (data as any).graduationYear !== undefined) {
+      updatePayload.graduation_year = Number(data.graduation_year || (data as any).graduationYear);
+    }
+    if (data.current_role !== undefined || (data as any).currentRole !== undefined) {
+      updatePayload.current_role = data.current_role || (data as any).currentRole;
+    }
     if (data.grades !== undefined) updatePayload.grades = data.grades;
 
     if (data.available_times !== undefined) updatePayload.available_times = data.available_times;
-    if (data.min_salary_requirement !== undefined) updatePayload.min_salary_requirement = data.min_salary_requirement;
-    if (data.experience_years !== undefined) updatePayload.experience_years = Number(data.experience_years);
-    if (data.teaching_mode !== undefined) updatePayload.teaching_mode = data.teaching_mode;
+    if (data.min_salary_requirement !== undefined || (data as any).minSalaryRequirement !== undefined) {
+      updatePayload.min_salary_requirement = data.min_salary_requirement || (data as any).minSalaryRequirement;
+    }
+    if (data.experience_years !== undefined || (data as any).experienceYears !== undefined) {
+      updatePayload.experience_years = Number(data.experience_years ?? (data as any).experienceYears);
+    }
+    if (data.teaching_mode !== undefined || (data as any).teachingMode !== undefined) {
+      updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
+    }
 
 
     const updatedProfile = await prisma.tutorProfile.update({
