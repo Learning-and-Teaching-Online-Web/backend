@@ -62,6 +62,38 @@ export const verifyAuth = async (req: Request, res: Response, next: NextFunction
   }
 };
 
+export const optionalAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const authHeader = authReq.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      if (token) {
+        try {
+          const decoded = jwtUtil.verifyAccessToken(token);
+          authReq.user = {
+            id: decoded.userId,
+            userId: decoded.userId,
+            user_id: decoded.userId,
+            email: decoded.email,
+            role: decoded.role,
+            user_metadata: {
+              role: decoded.role,
+              full_name: decoded.full_name || (decoded.email ? decoded.email.split('@')[0] : '')
+            }
+          };
+          authReq.token = token;
+        } catch {
+          // Token invalid/expired, continue without user
+        }
+      }
+    }
+    next();
+  } catch {
+    next();
+  }
+};
+
 export const requireRole = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const authReq = req as AuthenticatedRequest;

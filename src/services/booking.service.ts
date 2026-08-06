@@ -33,8 +33,8 @@ export const bookingService = {
     if (finalScheduleId) {
       const schedules = course.schedules || [];
       const schedule = schedules.find((s: any) => s.schedule_id === finalScheduleId);
-      if (schedule && schedule.is_booked) {
-        throw new Error('Lịch học này đã được học viên khác đăng ký');
+      if (schedule && (schedule.booked_count >= schedule.max_slot || schedule.status === 'completed')) {
+        throw new Error('Lịch học này đã đủ số lượng học viên hoặc đã kết thúc');
       }
     }
 

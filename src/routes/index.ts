@@ -27,4 +27,4 @@ rootRouter.use('/admin', adminRoutes);
 rootRouter.use('/class-requests', classRequestRoutes);
 rootRouter.use('/reference-prices', referencePriceRoutes);
 
-export default rootRouter;
+export default rootRouter;

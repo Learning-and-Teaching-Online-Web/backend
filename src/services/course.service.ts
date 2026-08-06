@@ -183,11 +183,8 @@ export const courseService = {
       course_id: courseId,
       start_time: new Date(start_time),
       end_time: new Date(end_time),
-      is_recurring: is_recurring || false,
-      day_of_week,
-      recurrence_end: recurrence_end ? new Date(recurrence_end) : null,
       max_slot: max_slot || course.max_students || 1,
-      is_booked: false
+      booked_count: 0
     };
 
     return await courseRepository.addSchedule(payload);
