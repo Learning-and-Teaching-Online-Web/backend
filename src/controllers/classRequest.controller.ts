@@ -91,6 +91,21 @@ export const classRequestController = {
           validTutorUuid = trimmed;
         } else {
           textTutorCode = trimmed;
+          try {
+            const foundTutor = await (prisma as any).tutorProfile.findFirst({
+              where: {
+                OR: [
+                  { tutor_code: { equals: trimmed, mode: 'insensitive' } },
+                  { phone: { equals: trimmed, mode: 'insensitive' } }
+                ]
+              }
+            });
+            if (foundTutor) {
+              validTutorUuid = foundTutor.tutor_id;
+            }
+          } catch {
+            // Ignore search error
+          }
         }
       }
 
@@ -402,11 +417,23 @@ export const classRequestController = {
   // 5. Admin Lấy toàn bộ danh sách lớp yêu cầu
   async adminGetAll(req: Request, res: Response) {
     try {
-      const { status, page = 1, limit = 20 } = req.query;
+      const { status, search, page = 1, limit = 50 } = req.query;
 
       const where: any = {};
       if (status && status !== 'all') {
         where.status = String(status);
+      }
+
+      if (search) {
+        const searchStr = String(search).trim().replace(/^MS:\s*/i, '');
+        where.OR = [
+          { code: { contains: searchStr, mode: 'insensitive' } },
+          { student_name: { contains: searchStr, mode: 'insensitive' } },
+          { phone: { contains: searchStr, mode: 'insensitive' } },
+          { subject_name: { contains: searchStr, mode: 'insensitive' } },
+          { address_detail: { contains: searchStr, mode: 'insensitive' } },
+          { district: { contains: searchStr, mode: 'insensitive' } },
+        ];
       }
 
       const take = Number(limit);
@@ -463,6 +490,17 @@ export const classRequestController = {
         targetRequestId = found.request_id;
       }
 
+      const existingClass = await (prisma as any).classRequest.findUnique({
+        where: { request_id: targetRequestId },
+        select: { status: true },
+      });
+      if (!existingClass) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+      if (existingClass.status === 'CANCELLED') {
+        return res.status(400).json({ message: 'Lớp học này đã bị học viên HỦY YÊU CẦU, không thể thực hiện thao tác.' });
+      }
+
       const updated = await (prisma as any).classRequest.update({
         where: { request_id: targetRequestId },
         data: {
@@ -496,6 +534,17 @@ export const classRequestController = {
         const found = await (prisma as any).classRequest.findFirst({ where: { code: trimmedId } });
         if (!found) return res.status(404).json({ message: 'Không tìm thấy lớp học.' });
         targetRequestId = found.request_id;
+      }
+
+      const existingClass = await (prisma as any).classRequest.findUnique({
+        where: { request_id: targetRequestId },
+        select: { status: true },
+      });
+      if (!existingClass) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+      if (existingClass.status === 'CANCELLED') {
+        return res.status(400).json({ message: 'Lớp học này đã bị học viên HỦY YÊU CẦU, không thể giao cho gia sư.' });
       }
 
       // Update class request
@@ -713,6 +762,156 @@ export const classRequestController = {
     } catch (error: any) {
       console.error('Error updating my class request:', error);
       return res.status(500).json({ message: 'Lỗi khi cập nhật yêu cầu lớp học.', error: error.message });
+    }
+  },
+
+  // 10. Gia sư lấy danh sách lớp học được chỉ định / giao riêng hoặc ứng tuyển
+  async getTutorClasses(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư.' });
+      }
+
+      const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+        where: { user_id: user.user_id },
+      });
+
+      if (!tutorProfile) {
+        return res.json({ data: [] });
+      }
+
+      const tutorCode = tutorProfile.tutor_code ? String(tutorProfile.tutor_code).trim() : null;
+      const tutorPhone = tutorProfile.phone ? String(tutorProfile.phone).trim() : null;
+      const tutorShortCode = tutorProfile.tutor_id ? tutorProfile.tutor_id.slice(0, 8) : null;
+
+      const matchOrConditions: any[] = [
+        { selected_tutor_id: tutorProfile.tutor_id },
+        { assigned_tutor_id: tutorProfile.tutor_id },
+        { applications: { some: { tutor_id: tutorProfile.tutor_id } } },
+      ];
+
+      if (tutorCode) {
+        matchOrConditions.push({ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' } });
+        matchOrConditions.push({ selected_tutor_code: { contains: tutorCode, mode: 'insensitive' } });
+      }
+      if (tutorPhone) {
+        matchOrConditions.push({ selected_tutor_code: { equals: tutorPhone, mode: 'insensitive' } });
+      }
+      if (tutorShortCode) {
+        matchOrConditions.push({ selected_tutor_code: { contains: tutorShortCode, mode: 'insensitive' } });
+      }
+
+      const items = await (prisma as any).classRequest.findMany({
+        where: { OR: matchOrConditions },
+        orderBy: { created_at: 'desc' },
+        include: {
+          grade: { select: { name: true } },
+          applications: {
+            where: { tutor_id: tutorProfile.tutor_id },
+            select: { application_id: true, status: true, created_at: true },
+          },
+          _count: { select: { applications: true } },
+        },
+      });
+
+      const formattedItems = items.map((cls: any) => {
+        const myApp = cls.applications && cls.applications.length > 0 ? cls.applications[0] : null;
+        const selCode = cls.selected_tutor_code ? String(cls.selected_tutor_code).trim().toLowerCase() : '';
+        
+        // A class is strictly DIRECTED TO ME if the student specified this tutor when creating the request
+        const isDirectedToMe = (cls.selected_tutor_id === tutorProfile.tutor_id)
+          || (selCode !== '' && (
+              (tutorCode && selCode.includes(tutorCode.toLowerCase())) ||
+              (tutorPhone && selCode.includes(tutorPhone.toLowerCase())) ||
+              (tutorShortCode && selCode.includes(tutorShortCode.toLowerCase()))
+             ));
+
+        // Hide student phone completely if class is not yet ASSIGNED
+        const isAssigned = cls.status === 'ASSIGNED';
+        const phoneDisplay = isAssigned ? cls.phone : null;
+
+        return {
+          ...cls,
+          phone: phoneDisplay,
+          grade_level: cls.grade?.name || 'Tất cả các lớp',
+          is_directed_to_me: !!isDirectedToMe,
+          my_application_status: myApp ? myApp.status : null,
+        };
+      });
+
+      return res.json({ data: formattedItems });
+    } catch (error: any) {
+      console.error('Error fetching tutor classes:', error);
+      return res.status(500).json({ message: 'Lỗi khi lấy danh sách lớp học của gia sư.', error: error.message });
+    }
+  },
+
+  // 11. Gia sư Phản hồi nhận / Từ chối lớp học viên chỉ định
+  async respondTutorClass(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư.' });
+      }
+
+      const { id } = req.params;
+      const { action } = req.body; // 'ACCEPT' | 'DECLINE'
+
+      const trimmedId = String(id || '').trim();
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(trimmedId);
+
+      const where: any = isUuid
+        ? { OR: [{ request_id: trimmedId }, { code: trimmedId }] }
+        : { code: trimmedId };
+
+      const classRequest = await (prisma as any).classRequest.findFirst({ where });
+      if (!classRequest) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+
+      const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+        where: { user_id: user.user_id },
+      });
+
+      if (!tutorProfile) {
+        return res.status(403).json({ message: 'Không tìm thấy hồ sơ gia sư của bạn.' });
+      }
+
+      if (action === 'ACCEPT') {
+        const updated = await (prisma as any).classRequest.update({
+          where: { request_id: classRequest.request_id },
+          data: {
+            status: 'ASSIGNED',
+            assigned_tutor_id: tutorProfile.tutor_id,
+          },
+        });
+
+        return res.json({
+          message: 'Bạn đã đồng ý nhận lớp dạy thành công! Trung tâm sẽ liên hệ để trao đổi thông tin chi tiết.',
+          data: updated,
+        });
+      } else if (action === 'DECLINE') {
+        const updated = await (prisma as any).classRequest.update({
+          where: { request_id: classRequest.request_id },
+          data: {
+            status: 'OPEN',
+            selected_tutor_id: null,
+            selected_tutor_code: null,
+          },
+        });
+
+        return res.json({
+          message: 'Đã từ chối nhận lớp. Lớp học này đã được chuyển về trạng thái công khai để tuyển gia sư khác.',
+          data: updated,
+        });
+      } else {
+        return res.status(400).json({ message: 'Hành động không hợp lệ. Chỉ chấp nhận ACCEPT hoặc DECLINE.' });
+      }
+    } catch (error: any) {
+      console.error('Error responding tutor class:', error);
+      return res.status(500).json({ message: 'Lỗi khi phản hồi nhận lớp dạy.', error: error.message });
     }
   },
 };

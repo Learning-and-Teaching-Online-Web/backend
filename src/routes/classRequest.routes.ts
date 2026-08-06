@@ -7,6 +7,8 @@ const classRequestRoutes = Router();
 // Protected routes (MUST be defined before /:id)
 classRequestRoutes.get('/my-requests', verifyAuth, classRequestController.getMyRequests);
 classRequestRoutes.patch('/my-requests/:id', verifyAuth, classRequestController.updateMyRequest);
+classRequestRoutes.get('/tutor-classes', verifyAuth, classRequestController.getTutorClasses);
+classRequestRoutes.patch('/tutor-respond/:id', verifyAuth, classRequestController.respondTutorClass);
 classRequestRoutes.post('/', verifyAuth, classRequestController.create);
 classRequestRoutes.post('/:id/apply', verifyAuth, classRequestController.apply);
 

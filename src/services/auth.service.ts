@@ -163,10 +163,12 @@ export const authService = {
   },
 
   // Logic Cập nhật thông tin Profile
-  async updateProfile(userId: string, data: { fullName?: string; phone?: string; avatarUrl?: string; metadata?: any }) {
+  async updateProfile(userId: string, data: { fullName?: string; phone?: string; gender?: string; dateOfBirth?: string; avatarUrl?: string; metadata?: any }) {
     const updatePayload: any = {};
     if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
     if (data.phone !== undefined) updatePayload.phone = data.phone;
+    if (data.gender !== undefined) updatePayload.gender = data.gender;
+    if (data.dateOfBirth !== undefined) updatePayload.date_of_birth = data.dateOfBirth;
     if (data.metadata !== undefined) updatePayload.metadata = data.metadata;
 
     if (data.avatarUrl) {

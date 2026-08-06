@@ -119,7 +119,9 @@ export const userRepository = {
       where: { user_id: userId },
       include: {
         admin_profile: true,
-        student_profile: true,
+        student_profile: {
+          include: { grade: true }
+        },
         tutor_profile: true
       }
     });
@@ -141,15 +143,15 @@ export const userRepository = {
         address_detail: user.student_profile.address_detail,
         province: user.student_profile.province,
         district: user.student_profile.district,
-        grade_level: user.student_profile.grade_level,
+        grade_level: user.student_profile.grade?.name || null,
         academic_level: user.student_profile.academic_level,
       } : undefined
     };
   },
 
   // Cập nhật thông tin user theo ID
-  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; cccd?: string; metadata?: any }) {
-    const { metadata, full_name, phone, avatar_url, cccd, ...userData } = data;
+  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; gender?: string; date_of_birth?: any; cccd?: string; metadata?: any }) {
+    const { metadata, full_name, phone, avatar_url, gender, date_of_birth, cccd, ...userData } = data;
 
     const currentUser = await (prisma.user as any).findUnique({
       where: { user_id: userId },
@@ -162,18 +164,25 @@ export const userRepository = {
     if (full_name !== undefined) profileUpdate.full_name = full_name;
     if (phone !== undefined) profileUpdate.phone = phone;
     if (avatar_url !== undefined) profileUpdate.avatar_url = avatar_url;
+    if (gender !== undefined) profileUpdate.gender = gender;
+    if (date_of_birth !== undefined) profileUpdate.date_of_birth = date_of_birth ? new Date(date_of_birth) : null;
 
     if (role === 'student') {
       if (metadata) {
         if (metadata.address_detail !== undefined) profileUpdate.address_detail = metadata.address_detail;
         if (metadata.province !== undefined) profileUpdate.province = metadata.province;
         if (metadata.district !== undefined) profileUpdate.district = metadata.district;
-        if (metadata.grade_level !== undefined) profileUpdate.grade_level = metadata.grade_level;
         if (metadata.academic_level !== undefined) profileUpdate.academic_level = metadata.academic_level;
+
+        if (metadata.grade_level) {
+          const matchedGrade = await (prisma.grade as any).findUnique({
+            where: { name: metadata.grade_level }
+          });
+          if (matchedGrade) {
+            profileUpdate.grade_id = matchedGrade.grade_id;
+          }
+        }
       }
-
-
-
 
       if (Object.keys(profileUpdate).length > 0) {
         await (prisma.studentProfile as any).upsert({
