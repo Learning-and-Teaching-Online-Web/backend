@@ -5,6 +5,14 @@ export const classRequestController = {
   // 1. Học viên đăng ký tìm gia sư (Form Ảnh 1)
   async create(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Học viên để đăng bài tìm gia sư.' });
+      }
+      if (user.role === 'tutor') {
+        return res.status(403).json({ message: 'Tài khoản Gia sư không thể tạo bài tìm gia sư. Vui lòng sử dụng tài khoản Học viên.' });
+      }
+
       const {
         student_name,
         phone,
@@ -243,9 +251,66 @@ export const classRequestController = {
         return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
       }
 
+      // Check viewer permissions for Tutor Phone Number Privacy
+      const user = (req as any).user;
+      const isAdmin = user && user.role === 'admin';
+
+      // Check if user is the student owner of this request (when assigned)
+      let isOwnerStudentAndAssigned = false;
+      if (user && user.role === 'student' && classRequest.student_id && classRequest.status === 'ASSIGNED') {
+        const studentProfile = await (prisma as any).studentProfile.findUnique({
+          where: { user_id: user.user_id },
+        });
+        if (studentProfile && studentProfile.student_id === classRequest.student_id) {
+          isOwnerStudentAndAssigned = true;
+        }
+      }
+
+      // Check if user is a tutor and get tutor_id
+      let viewerTutorId: string | null = null;
+      if (user && user.role === 'tutor') {
+        const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+          where: { user_id: user.user_id },
+        });
+        if (tutorProfile) viewerTutorId = tutorProfile.tutor_id;
+      }
+
+      // Sanitize phone numbers in applications
+      const sanitizedApplications = classRequest.applications?.map((app: any) => {
+        const isSelfTutor = viewerTutorId && app.tutor_id && app.tutor_id === viewerTutorId;
+        const canSeePhone = isAdmin || isOwnerStudentAndAssigned || isSelfTutor;
+        return {
+          ...app,
+          applicant_phone: canSeePhone ? app.applicant_phone : null,
+        };
+      });
+
+      // Sanitize phone numbers in selected_tutor
+      let sanitizedSelectedTutor = classRequest.selected_tutor;
+      if (sanitizedSelectedTutor) {
+        const isSelfTutor = viewerTutorId && sanitizedSelectedTutor.tutor_id === viewerTutorId;
+        const canSeePhone = isAdmin || isOwnerStudentAndAssigned || isSelfTutor;
+        if (!canSeePhone) {
+          sanitizedSelectedTutor = { ...sanitizedSelectedTutor, phone: null };
+        }
+      }
+
+      // Sanitize phone numbers in assigned_tutor
+      let sanitizedAssignedTutor = classRequest.assigned_tutor;
+      if (sanitizedAssignedTutor) {
+        const isSelfTutor = viewerTutorId && sanitizedAssignedTutor.tutor_id === viewerTutorId;
+        const canSeePhone = isAdmin || isOwnerStudentAndAssigned || isSelfTutor;
+        if (!canSeePhone) {
+          sanitizedAssignedTutor = { ...sanitizedAssignedTutor, phone: null };
+        }
+      }
+
       const formattedData = {
         ...classRequest,
         grade_level: classRequest.grade?.name || 'Tất cả các lớp',
+        applications: sanitizedApplications,
+        selected_tutor: sanitizedSelectedTutor,
+        assigned_tutor: sanitizedAssignedTutor,
       };
 
       return res.json({ data: formattedData });
@@ -260,10 +325,6 @@ export const classRequestController = {
     try {
       const { id } = req.params;
       const { applicant_phone, available_date, available_from, notes } = req.body;
-
-      if (!applicant_phone) {
-        return res.status(400).json({ message: 'Vui lòng nhập số điện thoại của bạn.' });
-      }
 
       const trimmedId = String(id || '').trim();
       const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -286,26 +347,44 @@ export const classRequestController = {
         return res.status(400).json({ message: 'Lớp học này hiện không ở trạng thái mở ứng tuyển.' });
       }
 
-      let tutor_id: string | undefined = undefined;
       const user = (req as any).user;
-      if (user && user.role === 'tutor') {
-        const tutorProfile = await (prisma as any).tutorProfile.findUnique({
-          where: { user_id: user.user_id },
-        });
-        if (tutorProfile) {
-          tutor_id = tutorProfile.tutor_id;
-        }
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư để ứng tuyển nhận lớp.' });
+      }
+      if (user.role !== 'tutor') {
+        return res.status(403).json({ message: 'Chỉ tài khoản Gia sư mới có thể đăng ký nhận lớp dạy.' });
+      }
+
+      let tutor_id: string | undefined = undefined;
+      const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+        where: { user_id: user.user_id },
+      });
+      if (tutorProfile) {
+        tutor_id = tutorProfile.tutor_id;
       }
 
       const dateVal = available_from || available_date;
+      const finalPhone = applicant_phone || tutorProfile?.phone || user.email || 'Chưa cập nhật SĐT';
+
+      let validAvailableFrom: Date | null = null;
+      let finalNotes = notes || null;
+
+      if (dateVal) {
+        const parsed = new Date(dateVal);
+        if (!isNaN(parsed.getTime())) {
+          validAvailableFrom = parsed;
+        } else {
+          finalNotes = notes ? `[Thời gian nhận: ${dateVal}] ${notes}` : `[Thời gian nhận: ${dateVal}]`;
+        }
+      }
 
       const application = await (prisma as any).classApplication.create({
         data: {
           class_request_id: classRequest.request_id,
           tutor_id: tutor_id || null,
-          applicant_phone,
-          available_from: dateVal ? new Date(dateVal) : null,
-          notes: notes || null,
+          applicant_phone: finalPhone,
+          available_from: validAvailableFrom,
+          notes: finalNotes,
           status: 'PENDING',
         },
       });
@@ -528,14 +607,29 @@ export const classRequestController = {
           grade: { select: { name: true } },
           selected_tutor: { select: { tutor_id: true, full_name: true, phone: true, avatar_url: true } },
           assigned_tutor: { select: { tutor_id: true, full_name: true, phone: true, avatar_url: true } },
+          applications: {
+            where: { status: 'APPROVED' },
+            select: { applicant_phone: true, tutor: { select: { full_name: true, phone: true } } }
+          },
           _count: { select: { applications: true } },
         },
       });
 
-      const formattedItems = items.map((cls: any) => ({
-        ...cls,
-        grade_level: cls.grade?.name || 'Tất cả các lớp',
-      }));
+      const formattedItems = items.map((cls: any) => {
+        const approvedApp = cls.applications && cls.applications.length > 0 ? cls.applications[0] : null;
+        const assignedPhone = cls.assigned_tutor?.phone || approvedApp?.applicant_phone || approvedApp?.tutor?.phone || null;
+        return {
+          ...cls,
+          grade_level: cls.grade?.name || 'Tất cả các lớp',
+          assigned_tutor: cls.assigned_tutor ? {
+            ...cls.assigned_tutor,
+            phone: assignedPhone || cls.assigned_tutor.phone,
+          } : (approvedApp ? {
+            full_name: approvedApp.tutor?.full_name || 'Gia sư',
+            phone: assignedPhone,
+          } : null),
+        };
+      });
 
       return res.json({ data: formattedItems });
     } catch (error: any) {

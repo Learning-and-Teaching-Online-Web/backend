@@ -4,14 +4,14 @@ import { verifyAuth, optionalAuth } from '../middlewares/auth.middleware';
 
 const classRequestRoutes = Router();
 
-// Student / User protected routes (MUST be defined before /:id)
+// Protected routes (MUST be defined before /:id)
 classRequestRoutes.get('/my-requests', verifyAuth, classRequestController.getMyRequests);
 classRequestRoutes.patch('/my-requests/:id', verifyAuth, classRequestController.updateMyRequest);
+classRequestRoutes.post('/', verifyAuth, classRequestController.create);
+classRequestRoutes.post('/:id/apply', verifyAuth, classRequestController.apply);
 
 // Public / General routes
-classRequestRoutes.post('/', optionalAuth, classRequestController.create);
 classRequestRoutes.get('/open', classRequestController.getOpenClasses);
-classRequestRoutes.get('/:id', classRequestController.getDetail);
-classRequestRoutes.post('/:id/apply', classRequestController.apply);
+classRequestRoutes.get('/:id', optionalAuth, classRequestController.getDetail);
 
 export default classRequestRoutes;
