@@ -31,7 +31,19 @@ export const adminRepository = {
       where: { status: { in: ['confirmed', 'completed'] } },
       _sum: { total_amount: true }
     });
-    const totalRevenue = revenueResult._sum.total_amount ? Number(revenueResult._sum.total_amount) : 0;
+    const bookingRevenue = revenueResult._sum.total_amount ? Number(revenueResult._sum.total_amount) : 0;
+
+    // Tính thêm hoa hồng nhận lớp offline từ bảng transactions
+    const commissionRevenueResult = await prisma.transaction.aggregate({
+      where: {
+        status: 'success',
+        description: { contains: 'Phí nhận lớp', mode: 'insensitive' }
+      },
+      _sum: { amount: true }
+    });
+    const commissionRevenue = commissionRevenueResult._sum.amount ? Number(commissionRevenueResult._sum.amount) : 0;
+
+    const totalRevenue = bookingRevenue + commissionRevenue;
 
     const topTutors = await prisma.tutorProfile.findMany({
       orderBy: { rating: 'desc' },
@@ -395,6 +407,34 @@ export const adminRepository = {
       throw new Error('Payout request not found');
     }
 
+    if (payout.status !== 'pending') {
+      throw new Error('Yêu cầu rút tiền này đã được xử lý trước đó.');
+    }
+
+    // Nếu duyệt thành công (completed), tiến hành trừ tiền ví của gia sư
+    if (status === 'completed') {
+      const tutor = await prisma.tutorProfile.findUnique({
+        where: { tutor_id: payout.tutor_id }
+      });
+      if (!tutor) {
+        throw new Error('Không tìm thấy thông tin gia sư liên quan đến yêu cầu này.');
+      }
+
+      const wallet = await prisma.wallet.findUnique({
+        where: { user_id: tutor.user_id }
+      });
+
+      if (!wallet || Number(wallet.balance) < Number(payout.amount)) {
+        throw new Error('Số dư ví của gia sư không đủ để duyệt yêu cầu rút tiền này.');
+      }
+
+      // Trừ tiền khỏi ví gia sư
+      await prisma.wallet.update({
+        where: { user_id: tutor.user_id },
+        data: { balance: { decrement: payout.amount } }
+      });
+    }
+
     const updatedPayout = await prisma.payout.update({
       where: { payout_id: payoutId },
       data: {
@@ -402,25 +442,6 @@ export const adminRepository = {
         processed_at: new Date()
       }
     });
-
-    // Refund tutor if payout fails / rejected
-    if (status === 'failed') {
-      const tutor = await prisma.tutorProfile.findUnique({
-        where: { tutor_id: payout.tutor_id }
-      });
-      if (tutor) {
-        await prisma.wallet.upsert({
-          where: { user_id: tutor.user_id },
-          create: {
-            user_id: tutor.user_id,
-            balance: payout.amount
-          },
-          update: {
-            balance: { increment: payout.amount }
-          }
-        });
-      }
-    }
 
     return updatedPayout;
   }

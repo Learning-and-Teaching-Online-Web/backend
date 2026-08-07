@@ -417,6 +417,7 @@ export const classRequestController = {
   // 5. Admin Lấy toàn bộ danh sách lớp yêu cầu
   async adminGetAll(req: Request, res: Response) {
     try {
+      await checkAndExpireAssignments();
       const { status, search, page = 1, limit = 50 } = req.query;
 
       const where: any = {};
@@ -519,7 +520,7 @@ export const classRequestController = {
     }
   },
 
-  // 7. Admin Duyệt chọn Gia sư nhận lớp (ASSIGNED)
+  // 7. Admin Duyệt chọn Gia sư nhận lớp (WAITING_TUTOR_CONFIRM — chờ gia sư thanh toán phí)
   async adminAssignTutor(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -538,7 +539,7 @@ export const classRequestController = {
 
       const existingClass = await (prisma as any).classRequest.findUnique({
         where: { request_id: targetRequestId },
-        select: { status: true },
+        select: { status: true, desired_price: true, commission_rate: true },
       });
       if (!existingClass) {
         return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
@@ -547,12 +548,20 @@ export const classRequestController = {
         return res.status(400).json({ message: 'Lớp học này đã bị học viên HỦY YÊU CẦU, không thể giao cho gia sư.' });
       }
 
-      // Update class request
+      // Tính phí nhận lớp và hạn thanh toán 48 giờ
+      const desiredPrice = Number(existingClass.desired_price) || 0;
+      const commissionRate = Number(existingClass.commission_rate) || 35;
+      const feeAmount = desiredPrice * commissionRate / 100;
+      const paymentDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000); // +48 giờ
+
+      // Update class request: status → WAITING_TUTOR_CONFIRM
       const updatedClass = await (prisma as any).classRequest.update({
         where: { request_id: targetRequestId },
         data: {
-          status: 'ASSIGNED',
+          status: 'WAITING_TUTOR_CONFIRM',
           assigned_tutor_id: tutor_id || null,
+          payment_deadline: paymentDeadline,
+          fee_amount: feeAmount,
         },
       });
 
@@ -574,8 +583,8 @@ export const classRequestController = {
       }
 
       return res.json({
-        message: 'Giao lớp cho gia sư thành công!',
-        data: updatedClass,
+        message: `Giao lớp cho gia sư thành công! Gia sư có 48 giờ để thanh toán phí nhận lớp ${feeAmount.toLocaleString('vi-VN')} VNĐ.`,
+        data: { ...updatedClass, fee_amount: feeAmount, payment_deadline: paymentDeadline },
       });
     } catch (error: any) {
       console.error('Error assigning tutor to class:', error);
@@ -768,6 +777,7 @@ export const classRequestController = {
   // 10. Gia sư lấy danh sách lớp học được chỉ định / giao riêng hoặc ứng tuyển
   async getTutorClasses(req: Request, res: Response) {
     try {
+      await checkAndExpireAssignments();
       const user = (req as any).user;
       if (!user) {
         return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư.' });
@@ -836,6 +846,7 @@ export const classRequestController = {
           phone: phoneDisplay,
           grade_level: cls.grade?.name || 'Tất cả các lớp',
           is_directed_to_me: !!isDirectedToMe,
+          is_assigned_to_me: cls.assigned_tutor_id === tutorProfile.tutor_id,
           my_application_status: myApp ? myApp.status : null,
         };
       });
@@ -914,5 +925,152 @@ export const classRequestController = {
       return res.status(500).json({ message: 'Lỗi khi phản hồi nhận lớp dạy.', error: error.message });
     }
   },
+
+  // 12. Gia sư thanh toán phí nhận lớp offline từ ví nội bộ
+  async payCommission(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư.' });
+      }
+
+      const { id } = req.params;
+      const trimmedId = String(id || '').trim();
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(trimmedId);
+      const where: any = isUuid ? { request_id: trimmedId } : { code: trimmedId };
+
+      // 1. Lấy thông tin lớp
+      const classRequest = await (prisma as any).classRequest.findFirst({
+        where,
+        include: { grade: { select: { name: true } } },
+      });
+      if (!classRequest) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+
+      // 2. Lấy hồ sơ gia sư
+      const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+        where: { user_id: user.user_id },
+      });
+      if (!tutorProfile) {
+        return res.status(403).json({ message: 'Không tìm thấy hồ sơ gia sư.' });
+      }
+
+      // 3. Validate trạng thái lớp
+      if (classRequest.status !== 'WAITING_TUTOR_CONFIRM') {
+        return res.status(400).json({
+          message: classRequest.status === 'ASSIGNED'
+            ? 'Lớp học này đã được xác nhận (phí đã được thanh toán).'
+            : `Không thể thanh toán phí. Trạng thái lớp hiện tại: ${classRequest.status}`,
+        });
+      }
+
+      // 4. Validate gia sư được giao
+      if (classRequest.assigned_tutor_id !== tutorProfile.tutor_id) {
+        return res.status(403).json({ message: 'Bạn không phải gia sư được giao lớp này.' });
+      }
+
+      // 5. Kiểm tra hạn thanh toán
+      if (classRequest.payment_deadline && new Date() > new Date(classRequest.payment_deadline)) {
+        // Lazy expire: cập nhật trạng thái EXPIRED
+        await (prisma as any).classRequest.update({
+          where: { request_id: classRequest.request_id },
+          data: { status: 'EXPIRED', assigned_tutor_id: null, payment_deadline: null, fee_amount: null },
+        });
+        return res.status(400).json({ message: 'Thời hạn thanh toán phí đã hết. Lớp đã được chuyển trở lại trạng thái hết hạn.' });
+      }
+
+      const feeAmount = Number(classRequest.fee_amount) || 0;
+      if (feeAmount <= 0) {
+        return res.status(400).json({ message: 'Không xác định được số tiền phí nhận lớp.' });
+      }
+
+      // 6. Kiểm tra số dư ví gia sư
+      const tutorWallet = await (prisma as any).wallet.findUnique({
+        where: { user_id: user.user_id },
+      });
+      const currentBalance = tutorWallet ? Number(tutorWallet.balance) : 0;
+
+      if (currentBalance < feeAmount) {
+        return res.status(400).json({
+          error: 'insufficient_balance',
+          message: `Số dư ví không đủ. Cần ${feeAmount.toLocaleString('vi-VN')} VNĐ, hiện có ${currentBalance.toLocaleString('vi-VN')} VNĐ.`,
+          balance: currentBalance,
+          fee_amount: feeAmount,
+          shortage: feeAmount - currentBalance,
+        });
+      }
+
+      // 7. Tìm admin user để cộng tiền vào ví admin
+      const adminUser = await (prisma as any).user.findFirst({
+        where: { role: 'admin' },
+        select: { user_id: true },
+      });
+
+      // 8. Thực hiện giao dịch atomic
+      const [, , transaction, updatedClass] = await (prisma as any).$transaction([
+        // Trừ tiền khỏi ví gia sư
+        (prisma as any).wallet.update({
+          where: { user_id: user.user_id },
+          data: { balance: { decrement: feeAmount }, updated_at: new Date() },
+        }),
+        // Cộng tiền vào ví Admin
+        (prisma as any).wallet.upsert({
+          where: { user_id: adminUser?.user_id || user.user_id },
+          create: { user_id: adminUser?.user_id || user.user_id, balance: feeAmount, currency: 'VND' },
+          update: { balance: { increment: feeAmount }, updated_at: new Date() },
+        }),
+        // Tạo Transaction record
+        (prisma as any).transaction.create({
+          data: {
+            user_id: user.user_id,
+            amount: feeAmount,
+            payment_method: 'wallet',
+            description: `Phí nhận lớp MS:${classRequest.code} — ${classRequest.subject_name}`,
+            status: 'success',
+            paid_at: new Date(),
+          },
+        }),
+        // Cập nhật trạng thái lớp → ASSIGNED (đã xác nhận)
+        (prisma as any).classRequest.update({
+          where: { request_id: classRequest.request_id },
+          data: { status: 'ASSIGNED' },
+        }),
+      ]);
+
+      return res.json({
+        message: `Thanh toán phí nhận lớp thành công! Lớp học đã được xác nhận cho bạn.`,
+        data: {
+          class_request: updatedClass,
+          transaction_id: transaction.transaction_id,
+          fee_amount: feeAmount,
+          new_balance: currentBalance - feeAmount,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error in payCommission:', error);
+      return res.status(500).json({ message: 'Lỗi khi thanh toán phí nhận lớp.', error: error.message });
+    }
+  },
 };
 
+// Helper: Lazy check và expire các lớp WAITING_TUTOR_CONFIRM quá hạn thanh toán
+export async function checkAndExpireAssignments(): Promise<void> {
+  try {
+    await (prisma as any).classRequest.updateMany({
+      where: {
+        status: 'WAITING_TUTOR_CONFIRM',
+        payment_deadline: { lt: new Date() },
+      },
+      data: {
+        status: 'EXPIRED',
+        assigned_tutor_id: null,
+        payment_deadline: null,
+        fee_amount: null,
+      },
+    });
+  } catch (err) {
+    console.error('Error in checkAndExpireAssignments:', err);
+  }
+}

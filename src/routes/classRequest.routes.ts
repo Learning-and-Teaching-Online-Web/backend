@@ -9,6 +9,7 @@ classRequestRoutes.get('/my-requests', verifyAuth, classRequestController.getMyR
 classRequestRoutes.patch('/my-requests/:id', verifyAuth, classRequestController.updateMyRequest);
 classRequestRoutes.get('/tutor-classes', verifyAuth, classRequestController.getTutorClasses);
 classRequestRoutes.patch('/tutor-respond/:id', verifyAuth, classRequestController.respondTutorClass);
+classRequestRoutes.post('/:id/pay-commission', verifyAuth, classRequestController.payCommission);
 classRequestRoutes.post('/', verifyAuth, classRequestController.create);
 classRequestRoutes.post('/:id/apply', verifyAuth, classRequestController.apply);
 

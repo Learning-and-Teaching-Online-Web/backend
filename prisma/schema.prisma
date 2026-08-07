@@ -485,6 +485,7 @@ model CourseSchedule {
 enum PaymentMethod {
   zalopay // Thanh toán qua cổng ZaloPay
   wallet  // Thanh toán bằng Ví nội bộ hệ thống
+  mock    // Thanh toán giả lập (dùng cho dev/demo)
 }
 
 // Trạng thái của Booking (tiến độ tổng thể đặt lịch)
@@ -562,21 +563,22 @@ model Booking {
 // ================================================================
 model Transaction {
   transaction_id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho giao dịch
-  booking_id            String            @db.Uuid // Khóa ngoại liên kết tới bookings.booking_id (Xóa booking -> xóa transaction)
+  booking_id            String?           @db.Uuid // Khóa ngoại liên kết tới bookings.booking_id (nullable: giao dịch nội bộ không có booking)
   user_id               String            @db.Uuid // Khóa ngoại liên kết tới users.user_id (người thực hiện thanh toán)
   amount                Decimal           @db.Decimal(10, 2) // Số tiền thanh toán thực tế (VND)
   payment_method        PaymentMethod     @default(zalopay) // Phương thức thanh toán (zalopay | wallet)
+  description           String? // Mô tả giao dịch (VD: "Phí nhận lớp MS:89513", "Nạp tiền thủ công", "Học phí Toán 12")
   zalopay_order_id      String? // AppTransID do hệ thống gửi sang ZaloPay để tạo đơn
   zalopay_trans_id      String? // Mã giao dịch chính thức do ZaloPay trả về sau khi thanh toán xong
   zalopay_callback_data Json? // Mảng JSON lưu nguyên bản dữ liệu callback từ ZaloPay (phục vụ đối soát/audit)
   status                TransactionStatus @default(pending) // Trạng thái giao dịch (pending -> success / failed)
-  paid_at               DateTime?         @db.Timestamptz // Thời điểm ZaloPay xác nhận đã nhận tiền
+  paid_at               DateTime?         @db.Timestamptz // Thời điểm xác nhận giao dịch thành công
   created_at            DateTime          @default(now()) @db.Timestamptz // Thời điểm tạo giao dịch
   updated_at            DateTime          @default(now()) @db.Timestamptz // Thời điểm cập nhật trạng thái
 
   // Relations
-  booking Booking @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
-  user    User    @relation(fields: [user_id], references: [user_id])
+  booking Booking? @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
+  user    User     @relation(fields: [user_id], references: [user_id])
 
   @@index([booking_id], map: "idx_transactions_booking")
   @@index([user_id, created_at(sort: Desc)], map: "idx_transactions_user")
@@ -1057,17 +1059,19 @@ model CourseComment {
 
 enum ClassRequestStatus {
   PENDING_ADMIN // Mới tạo, chờ Admin kiểm tra và duyệt mở lớp
-  WAITING_TUTOR_CONFIRM // Học viên điền mã gia sư chọn trước, chờ Admin liên hệ gia sư
+  WAITING_TUTOR_CONFIRM // Gia sư đã được chọn, đang chờ thanh toán phí nhận lớp
   OPEN // Lớp chưa giao / Đang cần gia sư (Hiển thị danh sách công khai)
-  ASSIGNED // Đã giao cho gia sư thành công
+  ASSIGNED // Gia sư đã thanh toán phí, lớp đã xác nhận hoàn tất
   REJECTED // Admin từ chối yêu cầu
   CANCELLED // Học viên hủy yêu cầu
+  EXPIRED // Hết 48 giờ mà gia sư không thanh toán phí nhận lớp
 }
 
 enum ClassApplicationStatus {
-  PENDING // Đã gửi đơn ứng tuyển nhanh, chờ Admin duyệt
-  APPROVED // Được Admin chọn và giao lớp
-  REJECTED // Bị từ chối
+  PENDING              // Đã gửi đơn ứng tuyển nhanh, chờ Admin duyệt
+  APPROVED             // Được Admin chọn và giao lớp
+  APPROVED_WAITING_FEE // Được duyệt, đang chờ gia sư thanh toán phí (legacy)
+  REJECTED             // Bị từ chối
 }
 
 model ClassRequest {
@@ -1096,6 +1100,8 @@ model ClassRequest {
   other_requirements String? // Yêu cầu khác
   status             ClassRequestStatus @default(PENDING_ADMIN)
   assigned_tutor_id  String?            @db.Uuid // Gia sư chính thức được chọn
+  payment_deadline   DateTime?          @db.Timestamptz // Hạn thanh toán phí nhận lớp (WAITING_TUTOR_CONFIRM + 48 giờ)
+  fee_amount         Decimal?           @db.Decimal(12, 2) // Số tiền phí nhận lớp = desired_price * commission_rate / 100
   created_at         DateTime           @default(now()) @db.Timestamptz
   updated_at         DateTime           @default(now()) @db.Timestamptz
 

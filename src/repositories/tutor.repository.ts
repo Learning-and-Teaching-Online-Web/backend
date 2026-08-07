@@ -332,14 +332,18 @@ export const tutorRepository = {
 
     // Format transaction structure to align with UI expectations
     const formattedTransactions = [
-      ...walletTransactions.map((tx: any) => ({
-        transaction_id: tx.transaction_id,
-        type: 'earning' as const,
-        amount: Number(tx.amount),
-        status: tx.status === 'success' ? ('success' as const) : tx.status === 'pending' ? ('pending' as const) : ('failed' as const),
-        description: tx.description || 'Học phí nhận từ học sinh',
-        created_at: tx.created_at
-      })),
+      ...walletTransactions.map((tx: any) => {
+        const desc = tx.description || '';
+        const isExpense = desc.toLowerCase().includes('phí nhận lớp');
+        return {
+          transaction_id: tx.transaction_id,
+          type: (isExpense ? 'expense' : 'earning') as any,
+          amount: Number(tx.amount),
+          status: tx.status === 'success' ? ('success' as const) : tx.status === 'pending' ? ('pending' as const) : ('failed' as const),
+          description: tx.description || 'Học phí nhận từ học sinh',
+          created_at: tx.created_at
+        };
+      }),
       ...payouts.map((po: any) => ({
         transaction_id: po.payout_id,
         type: 'withdrawal' as const,
@@ -364,12 +368,6 @@ export const tutorRepository = {
     if (!wallet || Number(wallet.balance) < amount) {
       throw new Error('Số dư ví không đủ để rút số tiền này.');
     }
-
-    // Deduct wallet balance
-    await prisma.wallet.update({
-      where: { user_id: userId },
-      data: { balance: { decrement: amount } }
-    });
 
     // Create payout record
     const payout = await prisma.payout.create({
