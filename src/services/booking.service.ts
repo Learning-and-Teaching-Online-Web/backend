@@ -48,7 +48,6 @@ export const bookingService = {
     const bookingPayload: any = {
       student_id: student.student_id,
       course_id: courseId,
-      schedule_id: finalScheduleId,
       status: 'pending', // MVP: Tutor must manually approve
       payment_status: 'unpaid', // MVP: Payment pending
       total_amount: Number(course.price),
@@ -92,11 +91,12 @@ export const bookingService = {
     
     const course = booking.course;
     
-    if (course.type === 'online' && course.start_date && course.end_date) {
+    if (course.type === 'online' && course.start_date) {
       const schedules = course.schedules || [];
       const classSessions = [];
       const startDate = new Date(course.start_date);
-      const endDate = new Date(course.end_date);
+      const endTimes = schedules.map((s: any) => new Date(s.end_time).getTime());
+      const endDate = endTimes.length > 0 ? new Date(Math.max(...endTimes)) : new Date(startDate);
       
       let curr = new Date(startDate);
       let sessionCount = 0;
@@ -151,5 +151,186 @@ export const bookingService = {
     }
 
     return await bookingRepository.findByStudentId(student.student_id);
+  },
+
+  // Get student wallet balance and transaction logs
+  async getStudentWallet(userId: string) {
+    // 1. Get or create wallet
+    let wallet = await prisma.wallet.findUnique({
+      where: { user_id: userId }
+    });
+    if (!wallet) {
+      wallet = await prisma.wallet.create({
+        data: { user_id: userId, balance: 0, currency: 'VND' }
+      });
+    }
+
+    // 2. Fetch student transactions
+    const transactions = await prisma.transaction.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' }
+    });
+
+    const formattedTransactions = transactions.map((tx: any) => {
+      const desc = tx.description || '';
+      const isExpense = desc.toLowerCase().includes('thanh toán') || desc.toLowerCase().includes('khấu trừ') || desc.toLowerCase().includes('phí');
+      return {
+        transaction_id: tx.transaction_id,
+        type: isExpense ? 'expense' : 'deposit',
+        amount: Number(tx.amount),
+        status: tx.status === 'success' ? 'success' : tx.status === 'pending' ? 'pending' : 'failed',
+        description: tx.description || 'Nạp tiền vào tài khoản',
+        created_at: tx.created_at
+      };
+    });
+
+    return {
+      balance: Number(wallet.balance),
+      transactions: formattedTransactions
+    };
+  },
+
+  // Mock deposit for student wallet
+  async depositStudentWallet(userId: string, amount: number) {
+    // 1. Upsert wallet
+    const wallet = await prisma.wallet.upsert({
+      where: { user_id: userId },
+      create: { user_id: userId, balance: amount, currency: 'VND' },
+      update: { balance: { increment: amount }, updated_at: new Date() }
+    });
+
+    // 2. Create transaction record
+    await prisma.transaction.create({
+      data: {
+        user_id: userId,
+        amount: amount,
+        payment_method: 'mock',
+        description: 'Nạp tiền giả lập vào ví học viên',
+        status: 'success',
+        paid_at: new Date()
+      }
+    });
+
+    return {
+      balance: Number(wallet.balance),
+      amount_deposited: amount
+    };
+  },
+
+  // Pay booking using wallet
+  async payBooking(userId: string, bookingId: string) {
+    // 1. Fetch booking with course details
+    const booking = await prisma.booking.findUnique({
+      where: { booking_id: bookingId },
+      include: {
+        course: {
+          include: {
+            tutor: {
+              include: {
+                user: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!booking) {
+      throw new Error('Không tìm thấy thông tin đăng ký khóa học');
+    }
+
+    // 2. Fetch student profile and authorize
+    const student = await bookingRepository.findStudentProfileByUserId(userId);
+    if (!student || booking.student_id !== student.student_id) {
+      throw new Error('Bạn không có quyền thanh toán cho hóa đơn đăng ký này');
+    }
+
+    if (booking.payment_status === 'paid') {
+      throw new Error('Đơn đăng ký này đã được thanh toán thành công.');
+    }
+
+    if (booking.status === 'cancelled') {
+      throw new Error('Đơn đăng ký đã bị hủy, không thể tiến hành thanh toán.');
+    }
+
+    const totalAmount = Number(booking.total_amount);
+
+    // 3. Check wallet balance
+    const wallet = await prisma.wallet.findUnique({
+      where: { user_id: userId }
+    });
+
+    if (!wallet || Number(wallet.balance) < totalAmount) {
+      throw new Error('Số dư ví học viên không đủ. Vui lòng nạp thêm tiền.');
+    }
+
+    // 4. Calculate fees
+    const platformFee = totalAmount * 0.1;
+    const tutorShare = totalAmount * 0.9;
+
+    // 5. Execute transaction
+    const updatedBooking = await prisma.$transaction(async (tx) => {
+      // Deduct student wallet
+      await tx.wallet.update({
+        where: { user_id: userId },
+        data: { balance: { decrement: totalAmount }, updated_at: new Date() }
+      });
+
+      // Credit tutor wallet
+      const tutorUserId = booking.course.tutor.user_id;
+      await tx.wallet.upsert({
+        where: { user_id: tutorUserId },
+        create: { user_id: tutorUserId, balance: tutorShare, currency: 'VND' },
+        update: { balance: { increment: tutorShare }, updated_at: new Date() }
+      });
+
+      // Create student transaction log
+      await tx.transaction.create({
+        data: {
+          user_id: userId,
+          booking_id: bookingId,
+          amount: totalAmount,
+          payment_method: 'wallet',
+          description: `Thanh toán học phí khóa học: ${booking.course.title}`,
+          status: 'success',
+          paid_at: new Date()
+        }
+      });
+
+      // Create tutor transaction log
+      await tx.transaction.create({
+        data: {
+          user_id: tutorUserId,
+          booking_id: bookingId,
+          amount: tutorShare,
+          payment_method: 'wallet',
+          description: `Nhận học phí khóa học: ${booking.course.title} (đã khấu trừ 10% phí nền tảng)`,
+          status: 'success',
+          paid_at: new Date()
+        }
+      });
+
+      // Update booking status to paid & confirmed
+      return await tx.booking.update({
+        where: { booking_id: bookingId },
+        data: {
+          payment_status: 'paid',
+          status: 'confirmed',
+          platform_fee: platformFee,
+          updated_at: new Date()
+        }
+      });
+    });
+
+    // 6. Generate class sessions if it is an online class
+    if (booking.course.type === 'online') {
+      try {
+        await this.generateClassSessionsForBooking(bookingId);
+      } catch (sessionErr) {
+        console.error('Error generating class sessions after payment:', sessionErr);
+      }
+    }
+
+    return updatedBooking;
   }
 };

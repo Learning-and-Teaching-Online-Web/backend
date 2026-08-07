@@ -1,5 +1,19 @@
 import { courseRepository } from '../repositories/course.repository';
 import { tutorRepository } from '../repositories/tutor.repository';
+import { prisma } from '../config/prisma';
+
+async function getOrCreateSubjectId(subjectName: string): Promise<string> {
+  const name = subjectName.trim();
+  let subject = await prisma.subject.findUnique({
+    where: { name }
+  });
+  if (!subject) {
+    subject = await prisma.subject.create({
+      data: { name }
+    });
+  }
+  return subject.subject_id;
+}
 
 export const courseService = {
   // Create a new course
@@ -16,14 +30,11 @@ export const courseService = {
       price,
       type,
       start_date,
-      end_date,
-      duration_months,
       duration_minutes,
       max_students,
       total_sessions,
       level,
-      thumbnail_url,
-      tags
+      thumbnail_url
     } = courseData;
 
     // Validations
@@ -37,22 +48,21 @@ export const courseService = {
       throw new Error('Thời lượng buổi học phải lớn hơn 0');
     }
 
+    const subjectId = await getOrCreateSubjectId(subject);
+
     const payload = {
       tutor_id: tutor.tutor_id,
       title,
-      subject,
+      subject_id: subjectId,
       description,
       price: Number(price),
       type: type || 'online',
       start_date: start_date ? new Date(start_date) : null,
-      end_date: end_date ? new Date(end_date) : null,
-      duration_months: duration_months ? Number(duration_months) : null,
       duration_minutes: Number(duration_minutes) || 60,
       max_students: Number(max_students) || 1,
       total_sessions: Number(total_sessions) || 1,
       level,
-      thumbnail_url,
-      tags: tags || []
+      thumbnail_url
     };
 
     return await courseRepository.insert(payload);
@@ -77,19 +87,23 @@ export const courseService = {
     // Filter fields to update
     const updatePayload: any = {};
     const allowedFields = [
-      'title', 'subject', 'description', 'price', 'type', 'start_date', 'end_date',
-      'duration_months', 'duration_minutes', 'max_students', 'total_sessions',
-      'level', 'status', 'thumbnail_url', 'tags'
+      'title', 'description', 'price', 'type', 'start_date',
+      'duration_minutes', 'max_students', 'total_sessions',
+      'level', 'status', 'thumbnail_url'
     ];
+
+    if (courseData.subject !== undefined) {
+      updatePayload.subject_id = await getOrCreateSubjectId(courseData.subject);
+    }
 
     allowedFields.forEach(field => {
       if (courseData[field] !== undefined) {
         if (field === 'price' && Number(courseData[field]) < 0) {
           throw new Error('Giá tiền không được nhỏ hơn 0');
         }
-        if (['start_date', 'end_date'].includes(field)) {
+        if (field === 'start_date') {
           updatePayload[field] = courseData[field] ? new Date(courseData[field]) : null;
-        } else if (['duration_months', 'duration_minutes', 'max_students', 'total_sessions'].includes(field)) {
+        } else if (['duration_minutes', 'max_students', 'total_sessions'].includes(field)) {
           updatePayload[field] = courseData[field] ? Number(courseData[field]) : null;
         } else {
           updatePayload[field] = courseData[field];

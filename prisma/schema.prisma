@@ -332,6 +332,7 @@ model TutorCertificate {
 // Phân loại hình thức khóa học số (dạy trực tiếp đã được tách riêng sang module class_requests)
 enum CourseType {
   online // Lớp học trực tuyến Live với Gia sư theo lịch đặt trước (1-1 hoặc nhóm)
+  offline // Dạy trực tiếp tại nhà/trung tâm
   video // Khóa học Video pre-recorded tự học theo tốc độ cá nhân
 }
 
