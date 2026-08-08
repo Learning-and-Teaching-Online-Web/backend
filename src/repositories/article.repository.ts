@@ -3,31 +3,42 @@ import { prisma } from '../config/prisma';
 export const articleRepository = {
   async findAll() {
     return await prisma.article.findMany({
-      orderBy: { created_at: 'desc' }
+      orderBy: { created_at: 'desc' },
+      include: {
+        category_relation: true
+      }
     });
   },
 
   async findById(id: string) {
     return await prisma.article.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        category_relation: true
+      }
     });
   },
 
   async create(data: {
     title: string;
     excerpt: string;
-    content: any; // Json representing paragraphs
+    content: any;
     published_at?: Date | string;
     author: string;
+    author_id?: string;
     commentsCount?: number;
     category: string;
+    category_id?: string;
     imageType: string;
-    tags: any; // Json representing tags
+    tags: any;
   }) {
     return await prisma.article.create({
       data: {
         ...data,
         published_at: data.published_at ? new Date(data.published_at) : new Date()
+      },
+      include: {
+        category_relation: true
       }
     });
   },
@@ -35,7 +46,10 @@ export const articleRepository = {
   async update(id: string, data: any) {
     return await prisma.article.update({
       where: { id },
-      data
+      data,
+      include: {
+        category_relation: true
+      }
     });
   },
 
