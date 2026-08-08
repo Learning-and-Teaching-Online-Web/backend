@@ -53,7 +53,6 @@ async function migrate() {
         avatar_url TEXT,
         date_of_birth DATE,
         gender TEXT,
-        bio TEXT,
         cccd TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -139,15 +138,14 @@ async function migrate() {
                   avatar_url = COALESCE($3, avatar_url),
                   date_of_birth = COALESCE($4, date_of_birth),
                   gender = COALESCE($5, gender),
-                  bio = COALESCE($6, bio),
                   updated_at = NOW()
-              WHERE user_id = $7;
-            `, [full_name, phone, avatar_url, date_of_birth, gender, bio, user_id]);
+              WHERE user_id = $6;
+            `, [full_name, phone, avatar_url, date_of_birth, gender, user_id]);
           } else {
             await client.query(`
-              INSERT INTO admin_profiles (user_id, full_name, phone, avatar_url, date_of_birth, gender, bio)
-              VALUES ($1, $2, $3, $4, $5, $6, $7);
-            `, [user_id, full_name || '', phone, avatar_url, date_of_birth, gender, bio]);
+              INSERT INTO admin_profiles (user_id, full_name, phone, avatar_url, date_of_birth, gender)
+              VALUES ($1, $2, $3, $4, $5, $6);
+            `, [user_id, full_name || '', phone, avatar_url, date_of_birth, gender]);
           }
         }
       }
