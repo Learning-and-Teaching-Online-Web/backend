@@ -399,50 +399,62 @@ export const adminRepository = {
   },
 
   async updatePayoutStatus(payoutId: string, status: PayoutStatus, adminId?: string) {
-    const payout = await prisma.payout.findUnique({
-      where: { payout_id: payoutId }
-    });
+    return await (prisma as any).$transaction(async (tx: any) => {
+      const payout = await tx.payout.findUnique({
+        where: { payout_id: payoutId }
+      });
 
-    if (!payout) {
-      throw new Error('Payout request not found');
-    }
+      if (!payout) {
+        throw new Error('Payout request not found');
+      }
 
-    if (payout.status !== 'pending') {
-      throw new Error('Yêu cầu rút tiền này đã được xử lý trước đó.');
-    }
+      if (payout.status !== 'pending') {
+        throw new Error('Yêu cầu rút tiền này đã được xử lý trước đó.');
+      }
 
-    // Nếu duyệt thành công (completed), tiến hành trừ tiền ví của gia sư
-    if (status === 'completed') {
-      const tutor = await prisma.tutorProfile.findUnique({
+      const tutor = await tx.tutorProfile.findUnique({
         where: { tutor_id: payout.tutor_id }
       });
       if (!tutor) {
         throw new Error('Không tìm thấy thông tin gia sư liên quan đến yêu cầu này.');
       }
 
-      const wallet = await prisma.wallet.findUnique({
+      const wallet = await tx.wallet.findUnique({
         where: { user_id: tutor.user_id }
       });
 
-      if (!wallet || Number(wallet.balance) < Number(payout.amount)) {
-        throw new Error('Số dư ví của gia sư không đủ để duyệt yêu cầu rút tiền này.');
+      // Nếu đang chờ duyệt thì số tiền đó phải đang nằm trong frozen_balance
+      if (!wallet || Number(wallet.frozen_balance) < Number(payout.amount)) {
+        throw new Error('Số dư chờ xử lý không hợp lệ hoặc đã bị thay đổi.');
       }
 
-      // Trừ tiền khỏi ví gia sư
-      await prisma.wallet.update({
-        where: { user_id: tutor.user_id },
-        data: { balance: { decrement: payout.amount } }
+      if (status === 'completed') {
+        // Duyệt thành công: Trừ vĩnh viễn khỏi frozen_balance
+        await tx.wallet.update({
+          where: { user_id: tutor.user_id },
+          data: { frozen_balance: { decrement: payout.amount } }
+        });
+      } else if (status === 'failed') {
+        // Thất bại hoặc từ chối: Trả lại tiền vào balance từ frozen_balance
+        await tx.wallet.update({
+          where: { user_id: tutor.user_id },
+          data: { 
+            frozen_balance: { decrement: payout.amount },
+            balance: { increment: payout.amount }
+          }
+        });
+      }
+
+      const updatedPayout = await tx.payout.update({
+        where: { payout_id: payoutId },
+        data: {
+          status,
+          processed_by: adminId,
+          processed_at: new Date()
+        }
       });
-    }
 
-    const updatedPayout = await prisma.payout.update({
-      where: { payout_id: payoutId },
-      data: {
-        status,
-        processed_at: new Date()
-      }
+      return updatedPayout;
     });
-
-    return updatedPayout;
   }
 };

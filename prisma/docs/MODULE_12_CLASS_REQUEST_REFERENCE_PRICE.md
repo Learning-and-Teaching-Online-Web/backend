@@ -32,11 +32,15 @@ Module **Gia sư Offline & Bảng giá tham khảo** quản lý tính năng tìm
   |     | sessions_per_week, study_time|
   |     | tutor_requirement           |
   | FK  | selected_tutor_id -> tutor  |
+  |     | academic_level              |
   |     | selected_tutor_code         |
   |     | desired_price (Decimal)     |
   |     | commission_rate (Decimal)   | (Mặc định 35%)
+  |     | fee_amount (Decimal?)       |
+  |     | other_requirements          |
   |     | status (ClassRequestStatus) |
   | FK  | assigned_tutor_id -> tutor  |
+  |     | payment_deadline (DateTime?)|
   +-----------------------------------+
                     |
                     | (1 - N)
@@ -113,6 +117,8 @@ Module **Gia sư Offline & Bảng giá tham khảo** quản lý tính năng tìm
 | `other_requirements` | `String?` | Tùy chọn | Các yêu cầu khác. |
 | `status` | `ClassRequestStatus` | `@default(PENDING_ADMIN)` | Trạng thái của lớp (`PENDING_ADMIN`, `OPEN`, `ASSIGNED`...). |
 | `assigned_tutor_id` | `String?` | `@db.Uuid`, Khóa ngoại -> `tutor_profiles` | Gia sư chính thức được giao lớp. |
+| `payment_deadline` | `DateTime?` | `@db.Timestamptz` | Hạn thanh toán phí nhận lớp (sau khi xác nhận + 48 giờ). |
+| `fee_amount` | `Decimal?` | `@db.Decimal(12, 2)` | Số tiền phí nhận lớp (= `desired_price` * `commission_rate` / 100). |
 | `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày tạo yêu cầu. |
 | `updated_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày cập nhật gần nhất. |
 

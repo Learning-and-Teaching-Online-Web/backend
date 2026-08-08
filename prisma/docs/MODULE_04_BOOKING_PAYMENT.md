@@ -147,6 +147,7 @@ Lưu vết từng lần học sinh thực hiện giao dịch qua ZaloPay hoặc 
 ### 4.3. Bảng `wallets` (Ví tiền nội bộ)
 Quản lý tài khoản tiền nội bộ của từng người dùng trong hệ thống.
 
+
 | Thuộc tính (Column) | Kiểu dữ liệu (Type) | Ràng buộc (Constraints) | Ý nghĩa & Mục đích sử dụng |
 | :--- | :--- | :--- | :--- |
 | `wallet_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính định danh ví tiền. |
@@ -167,8 +168,6 @@ Lưu lịch sử yêu cầu rút tiền từ Ví nội bộ về tài khoản Ng
 | `payout_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính cho yêu cầu rút tiền. |
 | `tutor_id` | `String` (UUID) | `@db.Uuid`, Khóa ngoại -> `tutor_profiles` | Liên kết tới Gia sư yêu cầu rút tiền. |
 | `amount` | `Decimal` | `@db.Decimal(10, 2)` | Số tiền yêu cầu rút về ngân hàng (VND). |
-| `period_start` | `DateTime` | `@db.Date` | Ngày bắt đầu đợt tổng kết doanh thu. |
-| `period_end` | `DateTime` | `@db.Date` | Ngày kết thúc đợt tổng kết doanh thu. |
 | `bank_account` | `String?` | Tùy chọn | Số tài khoản ngân hàng nhận tiền. |
 | `bank_name` | `String?` | Tùy chọn | Tên ngân hàng thụ hưởng (VD: Vietcombank, MBBank). |
 | `account_holder_name` | `String?` | Tùy chọn | Tên chủ tài khoản ngân hàng thụ hưởng. |
@@ -177,3 +176,17 @@ Lưu lịch sử yêu cầu rút tiền từ Ví nội bộ về tài khoản Ng
 | `processed_by` | `String?` | `@db.Uuid`, Khóa ngoại -> `users` | Admin thực hiện duyệt yêu cầu rút tiền. |
 | `processed_at` | `DateTime?` | `@db.Timestamptz` | Thời điểm Admin xác nhận chuyển khoản ngân hàng thành công. |
 | `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày gửi yêu cầu rút tiền. |
+
+---
+
+## 5. Giải thích Lý do Thiết kế & Điểm nổi bật kỹ thuật Module 4 với Giáo viên
+
+1. **Ý nghĩa và tác dụng của `frozen_balance` (Số dư đóng băng) trong ví là gì?**
+   * Trong thực tế, khi Gia sư tạo lệnh rút tiền (Payout), Admin sẽ cần một khoảng thời gian (1-3 ngày làm việc) để kế toán kiểm tra và chuyển khoản ngân hàng.
+   * Nếu chỉ trừ tiền trong `balance` ngay khi yêu cầu, tài khoản gia sư sẽ bị hụt tiền nhưng chưa nhận được trong tài khoản ngân hàng, gây cảm giác "tiền bị mất".
+   * Nếu không trừ tiền, gia sư có thể đặt lệnh rút tiền nhiều lần vượt quá số dư hoặc dùng tiền đó mua khóa học khác.
+   * **Giải pháp:** Sử dụng cơ chế `frozen_balance`. Khi Gia sư yêu cầu rút 5,000,000đ:
+      * Hệ thống sẽ **trừ 5,000,000đ** từ `balance` (số dư khả dụng).
+      * Và **cộng 5,000,000đ** vào `frozen_balance` (số dư đang chờ xử lý).
+   * Tổng tài sản của gia sư không đổi, gia sư vẫn thấy tiền của mình trong hệ thống nhưng ở trạng thái "Đang chờ rút".
+   * Khi Admin chuyển khoản thành công (`status = completed`), hệ thống sẽ trừ vĩnh viễn 5,000,000đ khỏi `frozen_balance`. Nếu giao dịch thất bại hoặc Admin từ chối, tiền sẽ được chuyển ngược từ `frozen_balance` về lại `balance`.

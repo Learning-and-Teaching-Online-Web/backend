@@ -41,9 +41,11 @@ model User {
   email_verified  Boolean    @default(false) // Trạng thái xác thực email
   social_provider String? // Nhà cung cấp đăng nhập MXH (Google, Facebook...) nếu có
   social_id       String? // ID duy nhất từ Google/Facebook trả về
-  created_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản
-  updated_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
-  last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
+  created_at          DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản
+  updated_at          DateTime   @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
+  last_login_at       DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
+  reset_token         String? // Token đặt lại mật khẩu
+  reset_token_expires DateTime?  @db.Timestamptz // Thời hạn token đặt lại mật khẩu
 
   verification_token         String? // Token xác minh email
   verification_token_expires DateTime? @db.Timestamptz // Thời gian hết hạn token xác minh email (24h)
@@ -620,8 +622,11 @@ model Payout {
   payout_id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của đợt rút tiền
   tutor_id            String       @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
   amount              Decimal      @db.Decimal(10, 2) // Số tiền gia sư yêu cầu rút (VND)
+<<<<<<< HEAD
   period_start        DateTime?    @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
   period_end          DateTime?    @db.Date // Ngày kết thúc kỳ đối soát doanh thu
+=======
+>>>>>>> e92a527 (fix: fix payout when tutor require and wait admin confirm)
   bank_account        String? // Số tài khoản ngân hàng nhận tiền
   bank_name           String? // Tên ngân hàng (VD: Vietcombank, MBBank, Techcombank)
   account_holder_name String? // Tên chủ tài khoản ngân hàng (bắt buộc khi chuyển khoản)

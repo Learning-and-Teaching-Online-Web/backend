@@ -362,6 +362,7 @@ export const tutorRepository = {
 
   // Create a withdrawal payout request
   async withdrawFunds(userId: string, tutorId: string, amount: number, bankName: string, bankAccount: string) {
+<<<<<<< HEAD
     const wallet = await prisma.wallet.findUnique({
       where: { user_id: userId }
     });
@@ -377,10 +378,38 @@ export const tutorRepository = {
         bank_name: bankName,
         bank_account: bankAccount,
         status: 'pending'
+=======
+    return await (prisma as any).$transaction(async (tx: any) => {
+      const wallet = await tx.wallet.findUnique({
+        where: { user_id: userId }
+      });
+      if (!wallet || Number(wallet.balance) < amount) {
+        throw new Error('Số dư ví không đủ để rút số tiền này.');
+>>>>>>> e92a527 (fix: fix payout when tutor require and wait admin confirm)
       }
-    });
 
-    return payout;
+      // Trừ tiền ở balance và cộng vào frozen_balance (chờ duyệt)
+      await tx.wallet.update({
+        where: { user_id: userId },
+        data: {
+          balance: { decrement: amount },
+          frozen_balance: { increment: amount }
+        }
+      });
+
+      // Tạo lệnh rút tiền (Payout)
+      const payout = await tx.payout.create({
+        data: {
+          tutor_id: tutorId,
+          amount: amount,
+          bank_name: bankName,
+          bank_account: bankAccount,
+          status: 'pending'
+        }
+      });
+
+      return payout;
+    });
   },
 
   // Get tutor profile with certificates
