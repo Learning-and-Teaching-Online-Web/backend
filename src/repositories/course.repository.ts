@@ -31,6 +31,7 @@ export const courseRepository = {
           }
         },
         subject_relation: true,
+        course_days: true,
         schedules: {
           orderBy: { start_time: 'asc' }
         },
@@ -102,6 +103,7 @@ export const courseRepository = {
             },
           },
           subject_relation: true,
+          course_days: true,
           schedules: {
             orderBy: { start_time: 'asc' }
           },
@@ -231,5 +233,21 @@ export const courseRepository = {
     return await (prisma.courseLesson as any).delete({
       where: { lesson_id: lessonId }
     });
+  },
+
+  // Sync fixed course_days for a course
+  async syncCourseDays(courseId: string, days: string[]) {
+    await (prisma as any).courseDay.deleteMany({
+      where: { course_id: courseId }
+    });
+
+    if (Array.isArray(days) && days.length > 0) {
+      await (prisma as any).courseDay.createMany({
+        data: days.map((d: string) => ({
+          course_id: courseId,
+          day_of_week: d
+        }))
+      });
+    }
   }
 };
