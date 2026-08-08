@@ -40,6 +40,8 @@ export const userRepository = {
     gender?: string;
     date_of_birth?: Date;
     cccd?: string;
+    social_provider?: string;
+    social_id?: string;
   }) {
     const role = data.role || 'student';
 
@@ -47,9 +49,13 @@ export const userRepository = {
       data: {
         email: data.email,
         password: data.password,
-        role: role
+        role: role,
+        social_provider: data.social_provider || 'local',
+        social_id: data.social_id || null
       }
     });
+
+
 
     if (role === 'student') {
       await (prisma.studentProfile as any).upsert({
@@ -330,5 +336,17 @@ export const userRepository = {
         reset_token_expires: null
       }
     });
+  },
+
+  async updateSocialInfo(userId: string, provider: string, socialId: string) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        social_provider: provider,
+        social_id: socialId,
+        email_verified: true
+      }
+    });
   }
-};
+};
+

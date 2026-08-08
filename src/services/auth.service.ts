@@ -210,9 +210,8 @@ export const authService = {
     const existingUser: any = await userRepository.findByEmail(email);
 
     if (existingUser) {
-      if (!existingUser.email_verified) {
-        await userRepository.updateUserEmailVerified(existingUser.user_id, true);
-      }
+      // Cập nhật social_provider = 'google', social_id và email_verified = true
+      await userRepository.updateSocialInfo(existingUser.user_id, 'google', googleId);
 
       const tokenPayload = { userId: existingUser.user_id, email: existingUser.email, role: existingUser.role, full_name: existingUser.full_name || fullName };
       const accessToken = jwtUtil.generateAccessToken(tokenPayload);
@@ -226,7 +225,7 @@ export const authService = {
 
       return {
         isNewUser: false,
-        user: userWithoutPassword,
+        user: { ...userWithoutPassword, social_provider: 'google', social_id: googleId, email_verified: true },
         access_token: accessToken,
         refresh_token: refreshToken
       };
@@ -256,10 +255,15 @@ export const authService = {
     const user: any = await userRepository.createUser({
       email,
       full_name: fullName,
-      role: role || 'student'
+      role: role || 'student',
+      social_provider: 'google',
+      social_id: googleId || undefined
     });
 
     await userRepository.updateUserEmailVerified(user.user_id, true);
+    if (googleId) {
+      await userRepository.updateSocialInfo(user.user_id, 'google', googleId);
+    }
 
     const tokenPayload = { userId: user.user_id, email: user.email, role: user.role, full_name: user.full_name || fullName };
     const accessToken = jwtUtil.generateAccessToken(tokenPayload);
@@ -272,7 +276,8 @@ export const authService = {
     const { password: _, ...userWithoutPassword } = user;
 
     return {
-      user: userWithoutPassword,
+      user: { ...userWithoutPassword, social_provider: 'google', social_id: googleId, email_verified: true },
+
       access_token: accessToken,
       refresh_token: refreshToken
     };
