@@ -11,6 +11,7 @@ import tutorRoutes from './tutor.routes';
 import adminRoutes from './admin.routes';
 import classRequestRoutes from './classRequest.routes';
 import referencePriceRoutes from './referencePrice.routes';
+import gradeRoutes from './grade.routes';
 
 const rootRouter = Router();
 
@@ -26,5 +27,6 @@ rootRouter.use('/tutors', tutorRoutes);
 rootRouter.use('/admin', adminRoutes);
 rootRouter.use('/class-requests', classRequestRoutes);
 rootRouter.use('/reference-prices', referencePriceRoutes);
+rootRouter.use('/grades', gradeRoutes);
 
 export default rootRouter;

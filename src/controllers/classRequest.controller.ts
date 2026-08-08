@@ -1040,17 +1040,123 @@ export const classRequestController = {
       ]);
 
       return res.json({
-        message: `Thanh toán phí nhận lớp thành công! Lớp học đã được xác nhận cho bạn.`,
+        message: 'Đã hoàn tất thủ tục thanh toán phí nhận lớp thành công!',
         data: {
           class_request: updatedClass,
-          transaction_id: transaction.transaction_id,
-          fee_amount: feeAmount,
-          new_balance: currentBalance - feeAmount,
+          transaction: transaction,
         },
       });
     } catch (error: any) {
       console.error('Error in payCommission:', error);
       return res.status(500).json({ message: 'Lỗi khi thanh toán phí nhận lớp.', error: error.message });
+    }
+  },
+
+  // 15. Admin Chỉnh sửa toàn bộ thuộc tính của Lớp học Offline
+  async adminUpdateClassRequest(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const trimmedId = String(id || '').trim();
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(trimmedId);
+
+      const where: any = isUuid
+        ? { OR: [{ request_id: trimmedId }, { code: trimmedId }] }
+        : { code: trimmedId };
+
+      const existingClass = await (prisma as any).classRequest.findFirst({ where });
+      if (!existingClass) {
+        return res.status(404).json({ message: 'Không tìm thấy lớp học.' });
+      }
+
+      const {
+        student_name,
+        phone,
+        email,
+        address_detail,
+        district,
+        province,
+        grade_level,
+        grade_id: input_grade_id,
+        subject_name,
+        subject_id,
+        num_students,
+        academic_level,
+        sessions_per_week,
+        study_time,
+        tutor_requirement,
+        desired_price,
+        commission_rate,
+        other_requirements,
+        status
+      } = req.body;
+
+      const updateData: any = {};
+
+      if (student_name !== undefined) updateData.student_name = student_name;
+      if (phone !== undefined) updateData.phone = phone;
+      if (email !== undefined) updateData.email = email || null;
+      if (address_detail !== undefined) updateData.address_detail = address_detail;
+      if (district !== undefined) updateData.district = district || null;
+      if (province !== undefined) updateData.province = province || null;
+      if (subject_name !== undefined) updateData.subject_name = subject_name;
+      if (subject_id !== undefined) updateData.subject_id = subject_id || null;
+      if (num_students !== undefined) updateData.num_students = Number(num_students) || 1;
+      if (academic_level !== undefined) updateData.academic_level = academic_level || null;
+      if (sessions_per_week !== undefined) updateData.sessions_per_week = Number(sessions_per_week) || 2;
+      if (study_time !== undefined) updateData.study_time = study_time || null;
+      if (tutor_requirement !== undefined) updateData.tutor_requirement = tutor_requirement || null;
+      if (other_requirements !== undefined) updateData.other_requirements = other_requirements || null;
+
+      if (desired_price !== undefined && desired_price !== null) {
+        const numericPrice = typeof desired_price === 'number'
+          ? desired_price
+          : Number(String(desired_price || 0).replace(/[^0-9.]/g, '')) || 0;
+        updateData.desired_price = numericPrice;
+      }
+
+      if (commission_rate !== undefined && commission_rate !== null) {
+        updateData.commission_rate = Number(commission_rate) || 35;
+      }
+
+      if (status !== undefined && status !== null) {
+        updateData.status = status;
+      }
+
+      // Resolve grade_id if grade_level string provided
+      if (input_grade_id !== undefined) {
+        updateData.grade_id = input_grade_id || null;
+      } else if (grade_level) {
+        const foundGrade = await (prisma as any).grade.findFirst({
+          where: { name: { equals: String(grade_level).trim(), mode: 'insensitive' } }
+        });
+        if (foundGrade) {
+          updateData.grade_id = foundGrade.grade_id;
+        }
+      }
+
+      const updatedClass = await (prisma as any).classRequest.update({
+        where: { request_id: existingClass.request_id },
+        data: updateData,
+        include: {
+          grade: { select: { name: true } },
+          selected_tutor: { select: { full_name: true, phone: true } },
+          assigned_tutor: { select: { full_name: true, phone: true } }
+        }
+      });
+
+      const responseData = {
+        ...updatedClass,
+        grade_level: updatedClass.grade?.name || grade_level || 'Tất cả các lớp'
+      };
+
+      return res.json({
+        message: 'Cập nhật thông tin lớp học thành công.',
+        data: responseData
+      });
+    } catch (error: any) {
+      console.error('Error in adminUpdateClassRequest:', error);
+      return res.status(500).json({ message: 'Lỗi khi cập nhật thông tin lớp phía Admin.', error: error.message });
     }
   },
 };

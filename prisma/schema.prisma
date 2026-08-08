@@ -1079,6 +1079,11 @@ enum ClassApplicationStatus {
   REJECTED             // Bị từ chối
 }
 
+// ================================================================
+// BẢNG: class_requests
+// Mô tả: Quản lý các đơn đăng ký / bài đăng tìm gia sư dạy kèm Offline của Phụ huynh / Học viên.
+// Luồng: Học viên tạo bài (PENDING_ADMIN/WAITING_TUTOR_CONFIRM) -> Admin duyệt mở lớp (OPEN) -> Gia sư ứng tuyển -> Admin duyệt & gia sư đóng phí -> Đã giao (ASSIGNED).
+// ================================================================
 model ClassRequest {
   request_id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code                String? @unique // Mã lớp học hiển thị (VD: MS: 89513)
@@ -1123,6 +1128,10 @@ model ClassRequest {
   @@map("class_requests")
 }
 
+// ================================================================
+// BẢNG: class_applications
+// Mô tả: Quản lý danh sách các Gia sư ứng tuyển / Đăng ký nhận lớp học Offline.
+// ================================================================
 model ClassApplication {
   application_id   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   class_request_id String                 @db.Uuid
