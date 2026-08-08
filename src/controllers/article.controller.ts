@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { articleRepository } from '../repositories/article.repository';
+import { articleCategoryRepository } from '../repositories/articleCategory.repository';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export const articleController = {
@@ -30,19 +31,29 @@ export const articleController = {
 
   async create(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { title, excerpt, content, category, imageType, tags, author: inputAuthor } = req.body;
+      const { title, excerpt, content, category, category_id, imageType, tags, author: inputAuthor } = req.body;
 
-      if (!title || !excerpt || !content || !category) {
+      if (!title || !excerpt || !content || (!category && !category_id)) {
         res.status(400).json({ success: false, error: 'Vui lòng điền đầy đủ các trường bắt buộc (Tiêu đề, Tóm tắt, Thể loại, Nội dung)' });
         return;
       }
 
-      // Format date as 'Month DD, YYYY' (e.g. 'July 24, 2026')
-      const dateStr = new Date().toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
+      let targetCategoryId = category_id;
+      let categoryName = category;
+
+      if (category_id) {
+        const catRecord = await articleCategoryRepository.findById(category_id);
+        if (catRecord) {
+          categoryName = catRecord.name;
+        }
+      } else if (category) {
+        const categories = await articleCategoryRepository.findAll(true);
+        const matched = categories.find(c => c.name.toLowerCase().trim() === category.toLowerCase().trim());
+        if (matched) {
+          targetCategoryId = matched.category_id;
+          categoryName = matched.name;
+        }
+      }
 
       const userRole = req.user?.user_metadata?.role || req.user?.role;
       let authorName = req.user?.user_metadata?.full_name || req.user?.email || 'Gia sư';
@@ -56,7 +67,9 @@ export const articleController = {
         content: Array.isArray(content) ? content : [content],
         published_at: new Date(),
         author: authorName,
-        category,
+        author_id: req.user?.id || req.user?.user_id,
+        category: categoryName || category || 'Mẹo học tập',
+        category_id: targetCategoryId,
         imageType: imageType || 'globe',
         tags: Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : [])
       });
@@ -71,7 +84,7 @@ export const articleController = {
   async update(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const { title, excerpt, content, category, imageType, tags, author } = req.body;
+      const { title, excerpt, content, category, category_id, imageType, tags, author } = req.body;
 
       const existing = await articleRepository.findById(id as string);
       if (!existing) {
@@ -96,10 +109,24 @@ export const articleController = {
       if (title !== undefined) updatePayload.title = title;
       if (excerpt !== undefined) updatePayload.excerpt = excerpt;
       if (content !== undefined) updatePayload.content = Array.isArray(content) ? content : [content];
-      if (category !== undefined) updatePayload.category = category;
       if (imageType !== undefined) updatePayload.imageType = imageType;
       if (tags !== undefined) updatePayload.tags = Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : []);
       if (author !== undefined && userRole === 'admin') updatePayload.author = author;
+
+      if (category_id !== undefined) {
+        updatePayload.category_id = category_id;
+        const catRecord = await articleCategoryRepository.findById(category_id);
+        if (catRecord) {
+          updatePayload.category = catRecord.name;
+        }
+      } else if (category !== undefined) {
+        updatePayload.category = category;
+        const categories = await articleCategoryRepository.findAll(true);
+        const matched = categories.find(c => c.name.toLowerCase().trim() === category.toLowerCase().trim());
+        if (matched) {
+          updatePayload.category_id = matched.category_id;
+        }
+      }
 
       const updatedArticle = await articleRepository.update(id as string, updatePayload);
       res.status(200).json({ success: true, message: 'Cập nhật bài viết thành công', data: updatedArticle });
