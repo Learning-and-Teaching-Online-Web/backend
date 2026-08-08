@@ -2,14 +2,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { tutorRepository } from '../repositories/tutor.repository';
 import { supabaseAdmin } from '../config/supabase';
+import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-    email: string;
-  };
-}
 
 export const documentController = {
   // Get all lessons/documents for a course

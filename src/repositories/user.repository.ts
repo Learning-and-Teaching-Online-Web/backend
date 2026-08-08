@@ -265,5 +265,70 @@ export const userRepository = {
     return (prisma.refreshToken as any).deleteMany({
       where: { user_id: userId }
     });
+  },
+
+  // Token helper methods cho verification & reset password
+  async findByVerificationToken(token: string) {
+    return (prisma.user as any).findFirst({
+      where: { verification_token: token },
+      include: {
+        admin_profile: true,
+        student_profile: true,
+        tutor_profile: true
+      }
+    });
+  },
+
+  async findByResetToken(token: string) {
+    return (prisma.user as any).findFirst({
+      where: { reset_token: token },
+      include: {
+        admin_profile: true,
+        student_profile: true,
+        tutor_profile: true
+      }
+    });
+  },
+
+  async updateUserVerificationToken(userId: string, token: string | null, expiresAt: Date | null) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        verification_token: token,
+        verification_token_expires: expiresAt
+      }
+    });
+  },
+
+  async updateUserResetToken(userId: string, token: string | null, expiresAt: Date | null) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        reset_token: token,
+        reset_token_expires: expiresAt
+      }
+    });
+  },
+
+  async updateUserEmailVerified(userId: string, verified: boolean) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        email_verified: verified,
+        verification_token: null,
+        verification_token_expires: null
+      }
+    });
+  },
+
+  async updateUserPassword(userId: string, hashedPassword: string) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        password: hashedPassword,
+        reset_token: null,
+        reset_token_expires: null
+      }
+    });
   }
-};
+};

@@ -3,19 +3,10 @@ import { prisma } from '../config/prisma';
 import { jwtUtil } from '../utils/jwt.util';
 
 export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    userId: string;
-    user_id: string;
-    email: string;
-    role: string;
-    user_metadata?: {
-      role: string;
-      full_name?: string;
-    };
-  };
+  user?: any;
   token?: string;
 }
+
 
 export const verifyAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {

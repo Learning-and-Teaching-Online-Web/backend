@@ -45,6 +45,11 @@ model User {
   updated_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
   last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
 
+  verification_token         String? // Token xác minh email
+  verification_token_expires DateTime? @db.Timestamptz // Thời gian hết hạn token xác minh email (24h)
+  reset_token                String? // Token đặt lại mật khẩu
+  reset_token_expires        DateTime? @db.Timestamptz // Thời gian hết hạn token đặt lại mật khẩu (2h)
+
   // Relations
   admin_profile   AdminProfile?
   tutor_profile   TutorProfile?

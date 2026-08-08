@@ -84,7 +84,7 @@ export const articleController = {
       if (userRole !== 'admin') {
         const userFullName = (req.user?.user_metadata?.full_name || '').toLowerCase().trim();
         const userEmail = (req.user?.email || '').toLowerCase().trim();
-        const articleAuthor = existing.author.toLowerCase().trim();
+        const articleAuthor = (existing.author || '').toLowerCase().trim();
 
         if (articleAuthor !== userFullName && articleAuthor !== userEmail) {
           res.status(403).json({ success: false, error: 'Bạn chỉ có quyền chỉnh sửa bài viết của chính mình' });
@@ -124,7 +124,7 @@ export const articleController = {
       if (userRole !== 'admin') {
         const userFullName = (req.user?.user_metadata?.full_name || '').toLowerCase().trim();
         const userEmail = (req.user?.email || '').toLowerCase().trim();
-        const articleAuthor = existing.author.toLowerCase().trim();
+        const articleAuthor = (existing.author || '').toLowerCase().trim();
 
         if (articleAuthor !== userFullName && articleAuthor !== userEmail) {
           res.status(403).json({ success: false, error: 'Bạn chỉ có quyền xóa bài viết của chính mình' });
