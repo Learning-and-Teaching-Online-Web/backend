@@ -405,7 +405,10 @@ export const tutorRepository = {
           grade: true
         }
       },
+<<<<<<< HEAD
       available_times: true,
+=======
+>>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
       user: {
         select: {
           email: true
@@ -499,7 +502,11 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
+<<<<<<< HEAD
     // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
+=======
+    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades (an toàn, không đụng các dữ liệu khác)
+>>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
     if (gradeIds !== undefined && Array.isArray(gradeIds)) {
       await prisma.tutorGrade.deleteMany({
@@ -515,6 +522,7 @@ export const tutorRepository = {
         });
       }
     }
+<<<<<<< HEAD
 
     // Xử lý lưu các khung giờ rảnh dạy vào bảng tutor_available_times
     const availableTimes = data.available_times || (data as any).availableTimes;
@@ -533,6 +541,8 @@ export const tutorRepository = {
         });
       }
     }
+=======
+>>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
 
     const updatedProfile = await prisma.tutorProfile.update({
       where: { tutor_id: tutor.tutor_id },
@@ -546,7 +556,10 @@ export const tutorRepository = {
             grade: true
           }
         },
+<<<<<<< HEAD
         available_times: true,
+=======
+>>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
         user: {
           select: {
             email: true
