@@ -412,20 +412,27 @@ export const tutorRepository = {
     });
   },
 
-  // Get tutor profile with certificates
+  // Get tutor profile with certificates and grades
   async getMyProfile(userId: string) {
-    let profile = await prisma.tutorProfile.findUnique({
-      where: { user_id: userId },
-      include: {
-        certificates: {
-          orderBy: { created_at: 'desc' }
-        },
-        user: {
-          select: {
-            email: true
-          }
+    const includeClause = {
+      certificates: {
+        orderBy: { created_at: 'desc' as const }
+      },
+      grades: {
+        include: {
+          grade: true
+        }
+      },
+      user: {
+        select: {
+          email: true
         }
       }
+    };
+
+    let profile = await prisma.tutorProfile.findUnique({
+      where: { user_id: userId },
+      include: includeClause
     });
 
     if (!profile) {
@@ -437,38 +444,19 @@ export const tutorRepository = {
           tutor_code: generatedCode,
           verified_status: 'pending'
         },
-        include: {
-          certificates: {
-            orderBy: { created_at: 'desc' }
-          },
-          user: {
-            select: {
-              email: true
-            }
-          }
-        }
+        include: includeClause
       });
     } else if (!profile.tutor_code) {
       const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
       profile = await prisma.tutorProfile.update({
         where: { user_id: userId },
         data: { tutor_code: generatedCode },
-        include: {
-          certificates: {
-            orderBy: { created_at: 'desc' }
-          },
-          user: {
-            select: {
-              email: true
-            }
-          }
-        }
+        include: includeClause
       });
     }
 
     return formatTutorUser(profile);
   },
-
 
   // Update tutor profile fields
   async updateMyProfile(userId: string, data: {
@@ -483,6 +471,7 @@ export const tutorRepository = {
     graduation_year?: number;
     current_role?: string;
     grades?: any;
+    grade_ids?: string[];
     available_times?: any;
     min_salary_requirement?: string;
     experience_years?: number;
@@ -516,7 +505,6 @@ export const tutorRepository = {
     if (data.current_role !== undefined || (data as any).currentRole !== undefined) {
       updatePayload.current_role = data.current_role || (data as any).currentRole;
     }
-    if (data.grades !== undefined) updatePayload.grades = data.grades;
 
     if (data.available_times !== undefined) updatePayload.available_times = data.available_times;
     if (data.min_salary_requirement !== undefined || (data as any).minSalaryRequirement !== undefined) {
@@ -529,6 +517,22 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
+    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades (an toàn, không đụng các dữ liệu khác)
+    const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
+    if (gradeIds !== undefined && Array.isArray(gradeIds)) {
+      await prisma.tutorGrade.deleteMany({
+        where: { tutor_id: tutor.tutor_id }
+      });
+
+      if (gradeIds.length > 0) {
+        await prisma.tutorGrade.createMany({
+          data: gradeIds.map((gId: string) => ({
+            tutor_id: tutor.tutor_id,
+            grade_id: gId
+          }))
+        });
+      }
+    }
 
     const updatedProfile = await prisma.tutorProfile.update({
       where: { tutor_id: tutor.tutor_id },
@@ -536,6 +540,11 @@ export const tutorRepository = {
       include: {
         certificates: {
           orderBy: { created_at: 'desc' }
+        },
+        grades: {
+          include: {
+            grade: true
+          }
         },
         user: {
           select: {
