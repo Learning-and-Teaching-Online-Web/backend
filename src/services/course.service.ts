@@ -65,7 +65,14 @@ export const courseService = {
       thumbnail_url
     };
 
-    return await courseRepository.insert(payload);
+    const createdCourse = await courseRepository.insert(payload);
+
+    const courseDays = courseData.course_days || courseData.courseDays;
+    if (Array.isArray(courseDays)) {
+      await courseRepository.syncCourseDays(createdCourse.course_id, courseDays);
+    }
+
+    return await courseRepository.findById(createdCourse.course_id);
   },
 
   // Update a course details
@@ -111,7 +118,14 @@ export const courseService = {
       }
     });
 
-    return await courseRepository.update(courseId, updatePayload);
+    const updated = await courseRepository.update(courseId, updatePayload);
+
+    const courseDays = courseData.course_days || courseData.courseDays;
+    if (courseDays !== undefined && Array.isArray(courseDays)) {
+      await courseRepository.syncCourseDays(courseId, courseDays);
+    }
+
+    return await courseRepository.findById(courseId);
   },
 
   // Soft delete / archive a course
