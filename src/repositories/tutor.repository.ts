@@ -396,6 +396,7 @@ export const tutorRepository = {
           grade: true
         }
       },
+      available_times: true,
       user: {
         select: {
           email: true
@@ -479,7 +480,6 @@ export const tutorRepository = {
       updatePayload.current_role = data.current_role || (data as any).currentRole;
     }
 
-    if (data.available_times !== undefined) updatePayload.available_times = data.available_times;
     if (data.min_salary_requirement !== undefined || (data as any).minSalaryRequirement !== undefined) {
       updatePayload.min_salary_requirement = data.min_salary_requirement || (data as any).minSalaryRequirement;
     }
@@ -490,7 +490,7 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
-    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades (an toàn, không đụng các dữ liệu khác)
+    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
     if (gradeIds !== undefined && Array.isArray(gradeIds)) {
       await prisma.tutorGrade.deleteMany({
@@ -502,6 +502,24 @@ export const tutorRepository = {
           data: gradeIds.map((gId: string) => ({
             tutor_id: tutor.tutor_id,
             grade_id: gId
+          }))
+        });
+      }
+    }
+
+    // Xử lý lưu các khung giờ rảnh dạy vào bảng tutor_available_times
+    const availableTimes = data.available_times || (data as any).availableTimes;
+    if (availableTimes !== undefined && Array.isArray(availableTimes)) {
+      await prisma.tutorAvailableTime.deleteMany({
+        where: { tutor_id: tutor.tutor_id }
+      });
+
+      if (availableTimes.length > 0) {
+        await prisma.tutorAvailableTime.createMany({
+          data: availableTimes.map((item: any) => ({
+            tutor_id: tutor.tutor_id,
+            day_of_week: item.day_of_week || item.dayOfWeek,
+            time_slot: item.time_slot || item.timeSlot
           }))
         });
       }
@@ -519,6 +537,7 @@ export const tutorRepository = {
             grade: true
           }
         },
+        available_times: true,
         user: {
           select: {
             email: true
