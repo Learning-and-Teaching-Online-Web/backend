@@ -35,6 +35,7 @@ export const bookingRepository = {
       include: {
         course: {
           include: {
+            schedules: true,
             tutor: {
               include: {
                 user: {
@@ -45,8 +46,7 @@ export const bookingRepository = {
               }
             }
           }
-        },
-        schedule: true
+        }
       },
       orderBy: { created_at: 'desc' }
     });
@@ -76,19 +76,17 @@ export const bookingRepository = {
 
   // Mark schedule as booked
   async markScheduleBooked(scheduleId: string, isBooked: boolean) {
-    const data = await prisma.courseSchedule.update({
+    const data = await (prisma as any).courseSchedule.update({
       where: { schedule_id: scheduleId },
-      data: { is_booked: isBooked }
+      data: { status: isBooked ? 'completed' : 'upcoming' }
     });
 
     return data;
   },
 
-  // Insert multiple ClassSessions (Batch Insert)
-  async insertClassSessions(sessions: any[]) {
-    const data = await prisma.classSession.createMany({
-      data: sessions
-    });
-    return data;
+  // Insert multiple ClassSessions (Bảng class_sessions đã loại bỏ)
+  async insertClassSessions(_sessions: any[]) {
+    return { count: 0 };
   }
 };
+

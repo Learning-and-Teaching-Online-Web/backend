@@ -14,6 +14,7 @@ tutorRoutes.patch('/bookings/:id', verifyAuth, requireRole('tutor'), tutorContro
 tutorRoutes.get('/class-sessions', verifyAuth, requireRole('tutor'), tutorController.getClassSessions);
 tutorRoutes.get('/reviews', verifyAuth, requireRole('tutor'), tutorController.getReviews);
 tutorRoutes.get('/wallet', verifyAuth, requireRole('tutor'), tutorController.getWallet);
+tutorRoutes.post('/wallet/deposit', verifyAuth, requireRole('tutor'), tutorController.depositToWallet);
 tutorRoutes.post('/wallet/withdraw', verifyAuth, requireRole('tutor'), tutorController.withdrawFunds);
 tutorRoutes.get('/', tutorController.getAll);
 tutorRoutes.get('/:tutorId', tutorController.getById);

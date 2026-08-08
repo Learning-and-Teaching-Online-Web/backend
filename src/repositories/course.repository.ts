@@ -30,6 +30,7 @@ export const courseRepository = {
             }
           }
         },
+        subject_relation: true,
         schedules: {
           orderBy: { start_time: 'asc' }
         },
@@ -100,6 +101,7 @@ export const courseRepository = {
               }
             },
           },
+          subject_relation: true,
           schedules: {
             orderBy: { start_time: 'asc' }
           },

@@ -3,19 +3,10 @@ import { prisma } from '../config/prisma';
 import { jwtUtil } from '../utils/jwt.util';
 
 export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    userId: string;
-    user_id: string;
-    email: string;
-    role: string;
-    user_metadata?: {
-      role: string;
-      full_name?: string;
-    };
-  };
+  user?: any;
   token?: string;
 }
+
 
 export const verifyAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -59,6 +50,38 @@ export const verifyAuth = async (req: Request, res: Response, next: NextFunction
   } catch (err: any) {
     console.error('Error in verifyAuth middleware:', err);
     res.status(401).json({ success: false, error: 'Unauthorized: Auth failed' });
+  }
+};
+
+export const optionalAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const authHeader = authReq.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      if (token) {
+        try {
+          const decoded = jwtUtil.verifyAccessToken(token);
+          authReq.user = {
+            id: decoded.userId,
+            userId: decoded.userId,
+            user_id: decoded.userId,
+            email: decoded.email,
+            role: decoded.role,
+            user_metadata: {
+              role: decoded.role,
+              full_name: decoded.full_name || (decoded.email ? decoded.email.split('@')[0] : '')
+            }
+          };
+          authReq.token = token;
+        } catch {
+          // Token invalid/expired, continue without user
+        }
+      }
+    }
+    next();
+  } catch {
+    next();
   }
 };
 

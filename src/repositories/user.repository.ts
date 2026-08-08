@@ -40,6 +40,8 @@ export const userRepository = {
     gender?: string;
     date_of_birth?: Date;
     cccd?: string;
+    social_provider?: string;
+    social_id?: string;
   }) {
     const role = data.role || 'student';
 
@@ -47,9 +49,13 @@ export const userRepository = {
       data: {
         email: data.email,
         password: data.password,
-        role: role
+        role: role,
+        social_provider: data.social_provider || 'local',
+        social_id: data.social_id || null
       }
     });
+
+
 
     if (role === 'student') {
       await (prisma.studentProfile as any).upsert({
@@ -69,6 +75,7 @@ export const userRepository = {
         }
       });
     } else if (role === 'tutor') {
+      const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
       await (prisma.tutorProfile as any).upsert({
         where: { user_id: user.user_id },
         update: {
@@ -79,12 +86,14 @@ export const userRepository = {
         },
         create: {
           user_id: user.user_id,
+          tutor_code: generatedCode,
           full_name: data.full_name,
           phone: data.phone,
           gender: data.gender,
           date_of_birth: data.date_of_birth
         }
       });
+
     } else if (role === 'admin') {
       await (prisma.adminProfile as any).upsert({
         where: { user_id: user.user_id },
@@ -116,7 +125,9 @@ export const userRepository = {
       where: { user_id: userId },
       include: {
         admin_profile: true,
-        student_profile: true,
+        student_profile: {
+          include: { grade: true }
+        },
         tutor_profile: true
       }
     });
@@ -134,22 +145,19 @@ export const userRepository = {
       avatar_url: profile?.avatar_url || null,
       date_of_birth: profile?.date_of_birth || null,
       gender: profile?.gender || null,
-      bio: profile?.bio || null,
-      cccd: user.admin_profile?.cccd || null,
       metadata: user.student_profile ? {
-        grade_level: user.student_profile.grade_level,
-        learning_goals: user.student_profile.learning_goals,
-        preferred_subjects: user.student_profile.preferred_subjects,
-        preferred_mode: user.student_profile.preferred_mode,
-        budget_min: user.student_profile.budget_min,
-        budget_max: user.student_profile.budget_max
+        address_detail: user.student_profile.address_detail,
+        province: user.student_profile.province,
+        district: user.student_profile.district,
+        grade_level: user.student_profile.grade?.name || null,
+        academic_level: user.student_profile.academic_level,
       } : undefined
     };
   },
 
   // Cập nhật thông tin user theo ID
-  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; cccd?: string; metadata?: any }) {
-    const { metadata, full_name, phone, avatar_url, cccd, ...userData } = data;
+  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; gender?: string; date_of_birth?: any; cccd?: string; metadata?: any }) {
+    const { metadata, full_name, phone, avatar_url, gender, date_of_birth, cccd, ...userData } = data;
 
     const currentUser = await (prisma.user as any).findUnique({
       where: { user_id: userId },
@@ -162,15 +170,26 @@ export const userRepository = {
     if (full_name !== undefined) profileUpdate.full_name = full_name;
     if (phone !== undefined) profileUpdate.phone = phone;
     if (avatar_url !== undefined) profileUpdate.avatar_url = avatar_url;
+    if (gender !== undefined) profileUpdate.gender = gender;
+    if (date_of_birth !== undefined) profileUpdate.date_of_birth = date_of_birth ? new Date(date_of_birth) : null;
 
     if (role === 'student') {
       if (metadata) {
-        if (metadata.grade_level !== undefined) profileUpdate.grade_level = metadata.grade_level;
-        if (metadata.learning_goals !== undefined) profileUpdate.learning_goals = metadata.learning_goals;
-        if (metadata.preferred_subjects !== undefined) profileUpdate.preferred_subjects = metadata.preferred_subjects;
-        if (metadata.preferred_mode !== undefined) profileUpdate.preferred_mode = metadata.preferred_mode;
-        if (metadata.budget_max !== undefined) profileUpdate.budget_max = metadata.budget_max;
+        if (metadata.address_detail !== undefined) profileUpdate.address_detail = metadata.address_detail;
+        if (metadata.province !== undefined) profileUpdate.province = metadata.province;
+        if (metadata.district !== undefined) profileUpdate.district = metadata.district;
+        if (metadata.academic_level !== undefined) profileUpdate.academic_level = metadata.academic_level;
+
+        if (metadata.grade_level) {
+          const matchedGrade = await (prisma.grade as any).findUnique({
+            where: { name: metadata.grade_level }
+          });
+          if (matchedGrade) {
+            profileUpdate.grade_id = matchedGrade.grade_id;
+          }
+        }
       }
+
       if (Object.keys(profileUpdate).length > 0) {
         await (prisma.studentProfile as any).upsert({
           where: { user_id: userId },
@@ -252,5 +271,82 @@ export const userRepository = {
     return (prisma.refreshToken as any).deleteMany({
       where: { user_id: userId }
     });
+  },
+
+  // Token helper methods cho verification & reset password
+  async findByVerificationToken(token: string) {
+    return (prisma.user as any).findFirst({
+      where: { verification_token: token },
+      include: {
+        admin_profile: true,
+        student_profile: true,
+        tutor_profile: true
+      }
+    });
+  },
+
+  async findByResetToken(token: string) {
+    return (prisma.user as any).findFirst({
+      where: { reset_token: token },
+      include: {
+        admin_profile: true,
+        student_profile: true,
+        tutor_profile: true
+      }
+    });
+  },
+
+  async updateUserVerificationToken(userId: string, token: string | null, expiresAt: Date | null) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        verification_token: token,
+        verification_token_expires: expiresAt
+      }
+    });
+  },
+
+  async updateUserResetToken(userId: string, token: string | null, expiresAt: Date | null) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        reset_token: token,
+        reset_token_expires: expiresAt
+      }
+    });
+  },
+
+  async updateUserEmailVerified(userId: string, verified: boolean) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        email_verified: verified,
+        verification_token: null,
+        verification_token_expires: null
+      }
+    });
+  },
+
+  async updateUserPassword(userId: string, hashedPassword: string) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        password: hashedPassword,
+        reset_token: null,
+        reset_token_expires: null
+      }
+    });
+  },
+
+  async updateSocialInfo(userId: string, provider: string, socialId: string) {
+    return (prisma.user as any).update({
+      where: { user_id: userId },
+      data: {
+        social_provider: provider,
+        social_id: socialId,
+        email_verified: true
+      }
+    });
   }
 };
+
