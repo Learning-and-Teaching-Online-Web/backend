@@ -87,7 +87,6 @@ model AdminProfile {
   avatar_url    String? // Đường dẫn ảnh đại diện
   date_of_birth DateTime? @db.Date // Ngày tháng năm sinh
   gender        String? // Giới tính ("male" | "female" | "other")
-  bio           String? // Tiểu sử/Giới thiệu ngắn về bản thân
   cccd          String? // Căn cước công dân
   created_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
   updated_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất

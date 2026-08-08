@@ -13,7 +13,6 @@ function formatUserWithProfile(user: any) {
     avatar_url: profile?.avatar_url || null,
     date_of_birth: profile?.date_of_birth || null,
     gender: profile?.gender || null,
-    bio: profile?.bio || null,
     cccd: user.admin_profile?.cccd || null
   };
 }

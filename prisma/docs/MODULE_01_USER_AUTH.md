@@ -54,7 +54,7 @@ Module 1 bao gồm 3 bảng chính:
 |    | phone     |  |     | expires_at  |
 |    | avatar_url|  |     | created_at  |
 |    | dob,gender|  +-------------------+
-|    | bio, cccd |
+|    | cccd      |
 +----------------+
 ```
 
@@ -115,7 +115,6 @@ Lưu trữ thông tin cá nhân của Quản trị viên (Admin), tách biệt k
 | `avatar_url` | `String?` | Tùy chọn | Đường dẫn ảnh đại diện. |
 | `date_of_birth` | `DateTime?` | `@db.Date` | Ngày tháng năm sinh. |
 | `gender` | `String?` | Tùy chọn | Giới tính (`male`, `female`, `other`). |
-| `bio` | `String?` | Tùy chọn | Tiểu sử / Giới thiệu ngắn về bản thân. |
 | `cccd` | `String?` | Tùy chọn | Căn cước công dân của Quản trị viên. |
 | `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Thời điểm tạo hồ sơ Quản trị viên. |
 | `updated_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Thời điểm cập nhật thông tin mới nhất. |
