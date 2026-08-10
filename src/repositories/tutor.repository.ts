@@ -374,8 +374,6 @@ export const tutorRepository = {
       data: {
         tutor_id: tutorId,
         amount: amount,
-        period_start: new Date(),
-        period_end: new Date(),
         bank_name: bankName,
         bank_account: bankAccount,
         status: 'pending'

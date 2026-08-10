@@ -620,8 +620,8 @@ model Payout {
   payout_id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của đợt rút tiền
   tutor_id            String       @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
   amount              Decimal      @db.Decimal(10, 2) // Số tiền gia sư yêu cầu rút (VND)
-  period_start        DateTime     @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
-  period_end          DateTime     @db.Date // Ngày kết thúc kỳ đối soát doanh thu
+  period_start        DateTime?    @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
+  period_end          DateTime?    @db.Date // Ngày kết thúc kỳ đối soát doanh thu
   bank_account        String? // Số tài khoản ngân hàng nhận tiền
   bank_name           String? // Tên ngân hàng (VD: Vietcombank, MBBank, Techcombank)
   account_holder_name String? // Tên chủ tài khoản ngân hàng (bắt buộc khi chuyển khoản)
