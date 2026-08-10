@@ -114,8 +114,8 @@ export const classRequestController = {
         ? desired_price
         : Number(String(desired_price || 0).replace(/[^0-9.]/g, '')) || 0;
 
-      // If user provided selected_tutor_id or code -> WAITING_TUTOR_CONFIRM, else PENDING_ADMIN
-      const initialStatus = (validTutorUuid || textTutorCode) ? 'WAITING_TUTOR_CONFIRM' : 'PENDING_ADMIN';
+      // Tất cả yêu cầu lớp offline (kể cả chỉ định gia sư hay không) đều phải qua bước PENDING_ADMIN để Admin duyệt và tính phí
+      const initialStatus = 'PENDING_ADMIN';
 
       const classRequest = await (prisma as any).classRequest.create({
         data: {
@@ -894,13 +894,12 @@ export const classRequestController = {
         const updated = await (prisma as any).classRequest.update({
           where: { request_id: classRequest.request_id },
           data: {
-            status: 'ASSIGNED',
-            assigned_tutor_id: tutorProfile.tutor_id,
+            status: 'PENDING_ADMIN',
           },
         });
 
         return res.json({
-          message: 'Bạn đã đồng ý nhận lớp dạy thành công! Trung tâm sẽ liên hệ để trao đổi thông tin chi tiết.',
+          message: 'Bạn đã xác nhận muốn nhận lớp! Vui lòng chờ Admin duyệt, tính phí nhận lớp và liên hệ với bạn.',
           data: updated,
         });
       } else if (action === 'DECLINE') {
