@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { AdminPosition } from '@prisma/client';
 
 export const userRepository = {
   // Tìm kiếm thông tin user theo Email
@@ -25,7 +26,8 @@ export const userRepository = {
       avatar_url: profile?.avatar_url || null,
       date_of_birth: profile?.date_of_birth || null,
       gender: profile?.gender || null,
-      cccd: user.admin_profile?.cccd || null
+      cccd: user.admin_profile?.cccd || null,
+      position: user.admin_profile?.position || null
     };
   },
 
@@ -39,6 +41,7 @@ export const userRepository = {
     gender?: string;
     date_of_birth?: Date;
     cccd?: string;
+    position?: AdminPosition;
     social_provider?: string;
     social_id?: string;
   }) {
@@ -101,7 +104,8 @@ export const userRepository = {
           phone: data.phone,
           gender: data.gender,
           date_of_birth: data.date_of_birth,
-          cccd: data.cccd
+          cccd: data.cccd,
+          position: data.position
         },
         create: {
           user_id: user.user_id,
@@ -109,7 +113,8 @@ export const userRepository = {
           phone: data.phone,
           gender: data.gender,
           date_of_birth: data.date_of_birth,
-          cccd: data.cccd
+          cccd: data.cccd,
+          position: data.position
         }
       });
     }
@@ -144,6 +149,7 @@ export const userRepository = {
       avatar_url: profile?.avatar_url || null,
       date_of_birth: profile?.date_of_birth || null,
       gender: profile?.gender || null,
+      position: user.admin_profile?.position || null,
       metadata: user.student_profile ? {
         address_detail: user.student_profile.address_detail,
         province: user.student_profile.province,
@@ -155,8 +161,8 @@ export const userRepository = {
   },
 
   // Cập nhật thông tin user theo ID
-  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; gender?: string; date_of_birth?: any; cccd?: string; metadata?: any }) {
-    const { metadata, full_name, phone, avatar_url, gender, date_of_birth, cccd, ...userData } = data;
+  async updateById(userId: string, data: { full_name?: string; phone?: string; avatar_url?: string; gender?: string; date_of_birth?: any; cccd?: string; position?: AdminPosition; metadata?: any }) {
+    const { metadata, full_name, phone, avatar_url, gender, date_of_birth, cccd, position, ...userData } = data;
 
     const currentUser = await (prisma.user as any).findUnique({
       where: { user_id: userId },
@@ -217,6 +223,7 @@ export const userRepository = {
       }
     } else if (role === 'admin') {
       if (cccd !== undefined) profileUpdate.cccd = cccd;
+      if (position !== undefined) profileUpdate.position = position;
       if (Object.keys(profileUpdate).length > 0) {
         await (prisma.adminProfile as any).upsert({
           where: { user_id: userId },
@@ -226,7 +233,8 @@ export const userRepository = {
             full_name: full_name || '',
             phone,
             avatar_url,
-            cccd
+            cccd,
+            position
           }
         });
       }

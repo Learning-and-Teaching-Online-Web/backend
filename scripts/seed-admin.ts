@@ -1,6 +1,7 @@
 import { userRepository } from '../src/repositories/user.repository';
 import { passwordUtil } from '../src/utils/password.util';
 import readline from 'readline';
+import { AdminPosition } from '@prisma/client';
 
 async function createAdmin() {
   const rl = readline.createInterface({
@@ -19,6 +20,18 @@ async function createAdmin() {
     const fullName = await question('Họ và tên: ');
     const phone = await question('Số điện thoại (tùy chọn): ');
     const cccd = await question('Số CCCD (tùy chọn): ');
+    console.log('Vị trí nhân viên (tùy chọn): [1] super_admin | [2] moderator | [3] customer_support | [4] content_manager | [5] financial_manager');
+    const positionChoice = await question('Nhập số (1-5) hoặc bỏ trống: ');
+
+    const positionMap: Record<string, AdminPosition> = {
+      '1': 'super_admin',
+      '2': 'moderator',
+      '3': 'customer_support',
+      '4': 'content_manager',
+      '5': 'financial_manager'
+    };
+
+    const position = positionMap[positionChoice.trim()] || undefined;
 
     if (!email || !password || !fullName) {
       console.error('❌ Email, Mật khẩu và Họ tên là bắt buộc.');
@@ -40,6 +53,7 @@ async function createAdmin() {
       full_name: fullName,
       phone: phone || undefined,
       cccd: cccd || undefined,
+      position: position,
       role: 'admin'
     });
 
