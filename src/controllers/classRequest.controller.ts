@@ -909,6 +909,8 @@ export const classRequestController = {
             status: 'OPEN',
             selected_tutor_id: null,
             selected_tutor_code: null,
+            assigned_tutor_id: null,
+            payment_deadline: null,
           },
         });
 
