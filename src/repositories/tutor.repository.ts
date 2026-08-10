@@ -362,30 +362,12 @@ export const tutorRepository = {
 
   // Create a withdrawal payout request
   async withdrawFunds(userId: string, tutorId: string, amount: number, bankName: string, bankAccount: string) {
-<<<<<<< HEAD
-    const wallet = await prisma.wallet.findUnique({
-      where: { user_id: userId }
-    });
-    if (!wallet || Number(wallet.balance) < amount) {
-      throw new Error('Số dư ví không đủ để rút số tiền này.');
-    }
-
-    // Create payout record
-    const payout = await prisma.payout.create({
-      data: {
-        tutor_id: tutorId,
-        amount: amount,
-        bank_name: bankName,
-        bank_account: bankAccount,
-        status: 'pending'
-=======
     return await (prisma as any).$transaction(async (tx: any) => {
       const wallet = await tx.wallet.findUnique({
         where: { user_id: userId }
       });
       if (!wallet || Number(wallet.balance) < amount) {
         throw new Error('Số dư ví không đủ để rút số tiền này.');
->>>>>>> e92a527 (fix: fix payout when tutor require and wait admin confirm)
       }
 
       // Trừ tiền ở balance và cộng vào frozen_balance (chờ duyệt)
@@ -412,20 +394,28 @@ export const tutorRepository = {
     });
   },
 
-  // Get tutor profile with certificates
+  // Get tutor profile with certificates and grades
   async getMyProfile(userId: string) {
-    let profile = await prisma.tutorProfile.findUnique({
-      where: { user_id: userId },
-      include: {
-        certificates: {
-          orderBy: { created_at: 'desc' }
-        },
-        user: {
-          select: {
-            email: true
-          }
+    const includeClause = {
+      certificates: {
+        orderBy: { created_at: 'desc' as const }
+      },
+      grades: {
+        include: {
+          grade: true
+        }
+      },
+      available_times: true,
+      user: {
+        select: {
+          email: true
         }
       }
+    };
+
+    let profile = await prisma.tutorProfile.findUnique({
+      where: { user_id: userId },
+      include: includeClause
     });
 
     if (!profile) {
@@ -437,38 +427,19 @@ export const tutorRepository = {
           tutor_code: generatedCode,
           verified_status: 'pending'
         },
-        include: {
-          certificates: {
-            orderBy: { created_at: 'desc' }
-          },
-          user: {
-            select: {
-              email: true
-            }
-          }
-        }
+        include: includeClause
       });
     } else if (!profile.tutor_code) {
       const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
       profile = await prisma.tutorProfile.update({
         where: { user_id: userId },
         data: { tutor_code: generatedCode },
-        include: {
-          certificates: {
-            orderBy: { created_at: 'desc' }
-          },
-          user: {
-            select: {
-              email: true
-            }
-          }
-        }
+        include: includeClause
       });
     }
 
     return formatTutorUser(profile);
   },
-
 
   // Update tutor profile fields
   async updateMyProfile(userId: string, data: {
@@ -483,6 +454,7 @@ export const tutorRepository = {
     graduation_year?: number;
     current_role?: string;
     grades?: any;
+    grade_ids?: string[];
     available_times?: any;
     min_salary_requirement?: string;
     experience_years?: number;
@@ -516,9 +488,7 @@ export const tutorRepository = {
     if (data.current_role !== undefined || (data as any).currentRole !== undefined) {
       updatePayload.current_role = data.current_role || (data as any).currentRole;
     }
-    if (data.grades !== undefined) updatePayload.grades = data.grades;
 
-    if (data.available_times !== undefined) updatePayload.available_times = data.available_times;
     if (data.min_salary_requirement !== undefined || (data as any).minSalaryRequirement !== undefined) {
       updatePayload.min_salary_requirement = data.min_salary_requirement || (data as any).minSalaryRequirement;
     }
@@ -529,6 +499,40 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
+    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
+    const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
+    if (gradeIds !== undefined && Array.isArray(gradeIds)) {
+      await prisma.tutorGrade.deleteMany({
+        where: { tutor_id: tutor.tutor_id }
+      });
+
+      if (gradeIds.length > 0) {
+        await prisma.tutorGrade.createMany({
+          data: gradeIds.map((gId: string) => ({
+            tutor_id: tutor.tutor_id,
+            grade_id: gId
+          }))
+        });
+      }
+    }
+
+    // Xử lý lưu các khung giờ rảnh dạy vào bảng tutor_available_times
+    const availableTimes = data.available_times || (data as any).availableTimes;
+    if (availableTimes !== undefined && Array.isArray(availableTimes)) {
+      await prisma.tutorAvailableTime.deleteMany({
+        where: { tutor_id: tutor.tutor_id }
+      });
+
+      if (availableTimes.length > 0) {
+        await prisma.tutorAvailableTime.createMany({
+          data: availableTimes.map((item: any) => ({
+            tutor_id: tutor.tutor_id,
+            day_of_week: item.day_of_week || item.dayOfWeek,
+            time_slot: item.time_slot || item.timeSlot
+          }))
+        });
+      }
+    }
 
     const updatedProfile = await prisma.tutorProfile.update({
       where: { tutor_id: tutor.tutor_id },
@@ -537,6 +541,12 @@ export const tutorRepository = {
         certificates: {
           orderBy: { created_at: 'desc' }
         },
+        grades: {
+          include: {
+            grade: true
+          }
+        },
+        available_times: true,
         user: {
           select: {
             email: true
