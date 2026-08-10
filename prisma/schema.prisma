@@ -53,11 +53,6 @@ model User {
   email_verified  Boolean    @default(false) // Trạng thái xác thực email
   social_provider String? // Nhà cung cấp đăng nhập MXH (Google, Facebook...) nếu có
   social_id       String? // ID duy nhất từ Google/Facebook trả về
-  created_at          DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản
-  updated_at          DateTime   @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
-  last_login_at       DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
-  reset_token         String? // Token đặt lại mật khẩu
-  reset_token_expires DateTime?  @db.Timestamptz // Thời hạn token đặt lại mật khẩu
 
   // 3. Security Tokens
   verification_token         String? // Token xác minh email
