@@ -722,12 +722,22 @@ model Payout {
 
   // 2. Amount & Bank Details
   amount              Decimal      @db.Decimal(10, 2) // Số tiền gia sư yêu cầu rút (VND)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 7d23be3 (feat: add AdminPosition enum and position field to AdminProfile)
   bank_account        String? // Số tài khoản ngân hàng nhận tiền
   bank_name           String? // Tên ngân hàng (VD: Vietcombank, MBBank, Techcombank)
   account_holder_name String? // Tên chủ tài khoản ngân hàng (bắt buộc khi chuyển khoản)
   status              PayoutStatus @default(pending) // Trạng thái rút tiền (pending -> processing -> completed)
   admin_note          String? // Ghi chú của Admin khi xử lý (bắt buộc khi failed)
+<<<<<<< HEAD
+=======
+
+  // 3. Settlement Period & Timestamps
+  period_start        DateTime?    @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
+  period_end          DateTime?    @db.Date // Ngày kết thúc kỳ đối soát doanh thu
+>>>>>>> 7d23be3 (feat: add AdminPosition enum and position field to AdminProfile)
   processed_at        DateTime?    @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
   created_at          DateTime     @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
 
@@ -1366,6 +1376,10 @@ model ReferencePrice {
   teacher_tutor_price String // e.g. "1100 - 1300" (k/tháng)
 
   // 3. Timestamps
+<<<<<<< HEAD
+=======
+  created_at          DateTime @default(now()) @db.Timestamptz
+>>>>>>> 7d23be3 (feat: add AdminPosition enum and position field to AdminProfile)
   updated_at          DateTime @default(now()) @db.Timestamptz
 
   @@map("reference_prices")
