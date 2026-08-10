@@ -24,7 +24,7 @@ Module **Course & Schedule** quản lý các khóa học do Gia sư phát hành 
   | FK  | subject_id -> subjects      |
   |     | title (String)              |
   |     | price (Decimal)             |
-  |     | type (CourseType)           | (online, video)
+  |     | type (CourseType)           | (online, offline, video)
   |     | start_date (Date?)          |
   |     | schedule_time (String?)     | (VD: "07:00", "19:30")
   |     | duration_minutes (SmallInt) |
@@ -63,6 +63,7 @@ Module **Course & Schedule** quản lý các khóa học do Gia sư phát hành 
 
 ### 3.2. `CourseType` (Phân loại khóa học)
 *   `online`: Khóa học trực tuyến live với Gia sư theo lịch học cố định.
+*   `offline`: Dạy trực tiếp tại nhà/trung tâm theo lịch.
 *   `video`: Khóa học video quay sẵn (pre-recorded) cho học sinh tự học.
 
 ### 3.3. `SessionStatus` (Trạng thái buổi học)
@@ -85,7 +86,7 @@ Lưu thông tin tổng quan của từng khóa học do gia sư tạo ra.
 | `subject_id` | `String?` | `@db.Uuid`, Khóa ngoại -> `subjects` | Khóa ngoại liên kết tới danh mục Môn học. |
 | `description` | `String?` | Tùy chọn | Mô tả chi tiết đề cương, mục tiêu khóa học. |
 | `price` | `Decimal` | `@db.Decimal(10, 2)` | Học phí trọn gói khóa học (VND). |
-| `type` | `CourseType` | `@default(online)` | Loại khóa học (`online` live hoặc `video` tự học). |
+| `type` | `CourseType` | `@default(online)` | Loại khóa học (`online` live, `offline` trực tiếp hoặc `video` tự học). |
 | `start_date` | `DateTime?` | `@db.Date` | Ngày bắt đầu / khai giảng khóa Online. |
 | `schedule_time` | `String?` | Tùy chọn | Giờ bắt đầu mỗi buổi học (VD: `"07:00"`, `"19:30"`). |
 | `duration_minutes` | `Int` | `@db.SmallInt`, `@default(60)` | Thời lượng mỗi buổi học tính bằng phút (60, 90, 120 phút). |

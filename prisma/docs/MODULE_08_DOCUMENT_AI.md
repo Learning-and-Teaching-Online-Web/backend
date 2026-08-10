@@ -42,12 +42,11 @@ Module **Document & AI** cung cấp hạ tầng quản lý tài liệu học t�
   +-----------------------------------+        +-----------------------------------+
   | PK  | chunk_id (UUID)             |        | PK  | conversation_id (UUID)    |
   | FK  | doc_id -> documents         |        | FK  | user_id -> users          |
-  |     | content (String)            |        | FK  | session_id -> sessions    |
-  |     | chunk_index (Int)           |        | FK  | course_id -> courses      |
-  |     | token_count (Int?)          |        |     | role (user/assistant)     |
-  |     | embedding (vector(1536)?)   |        |     | message (String)          |
-  +-----------------------------------+        |     | model_used (String?)      |
-                                               |     | tokens_used (Int?)        |
+  |     | content (String)            |        | FK  | course_id -> courses      |
+  |     | chunk_index (Int)           |        |     | role (user/assistant)     |
+  |     | token_count (Int?)          |        |     | message (String)          |
+  |     | embedding (vector(1536)?)   |        |     | model_used (String?)      |
+  +-----------------------------------+        |     | tokens_used (Int?)        |
                                                +-----------------------------------+
 ```
 
@@ -100,7 +99,6 @@ Module **Document & AI** cung cấp hạ tầng quản lý tài liệu học t�
 | :--- | :--- | :--- | :--- |
 | `conversation_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính UUID định danh câu hội thoại. |
 | `user_id` | `String` (UUID) | `@db.Uuid`, Khóa ngoại -> `users` | Người dùng tham gia chat với AI (`onDelete: Cascade`). |
-| `session_id` | `String?` | `@db.Uuid`, Khóa ngoại -> `class_sessions` | Gắn bối cảnh với Buổi học cụ thể (`onDelete: SetNull`). |
 | `course_id` | `String?` | `@db.Uuid`, Khóa ngoại -> `courses` | Gắn bối cảnh với Khóa học cụ thể (`onDelete: SetNull`). |
 | `role` | `String` | Bắt buộc | Vai trò người gửi (`user`, `assistant`, `system`). |
 | `message` | `String` | Bắt buộc | Nội dung văn bản câu hỏi hoặc câu trả lời AI. |
@@ -146,5 +144,5 @@ Module **Document & AI** cung cấp hạ tầng quản lý tài liệu học t�
 2. **Kiểu dữ liệu `vector(1536)` trong `document_chunks` hoạt động như thế nào?**
    * **Semantic Search với pgvector:** Đây là tính năng mở rộng của extension **pgvector** trong PostgreSQL. Nó chuyển đổi ý nghĩa của đoạn văn bản thành toạ độ trong không gian 1536 chiều. Nhờ đó hệ thống thực hiện tìm kiếm ngữ nghĩa (Semantic Search) tìm đúng đoạn văn bản có cùng ý nghĩa với câu hỏi dù học sinh dùng từ khác biệt.
 
-3. **Ý nghĩa của cột `session_id` và `course_id` trong `ai_conversations`?**
-   * **Phân vùng bối cảnh (Context Scope):** Giúp AI nhận biết câu hỏi thuộc khóa học hoặc buổi học nào. Từ đó AI ưu tiên truy vấn các `document_chunks` của khóa học đó để đưa ra câu trả lời chuẩn xác nhất.
+3. **Ý nghĩa của cột `course_id` trong `ai_conversations`?**
+   * **Phân vùng bối cảnh (Context Scope):** Giúp AI nhận biết câu hỏi thuộc khóa học nào. Từ đó AI ưu tiên truy vấn các `document_chunks` của khóa học đó để đưa ra câu trả lời chuẩn xác nhất.

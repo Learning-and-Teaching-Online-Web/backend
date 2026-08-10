@@ -26,6 +26,7 @@ Module 1 bao gồm 3 bảng chính:
   +-----------------------------------+
   |               users               |
   +-----------------------------------+
+<<<<<<< HEAD
   | PK  | user_id (UUID)              | <-----+ (1 - 1) AdminProfile
   | UNQ | email (Citext)              | <-----+ (1 - 1) TutorProfile
   |     | password (String?)          | <-----+ (1 - 1) StudentProfile
@@ -39,6 +40,17 @@ Module 1 bao gồm 3 bảng chính:
   |     | reset_token (String?)       |
   |     | reset_token_expires (Tz?)   |
   |     | created_at (Timestamptz)    |
+=======
+  | PK  | user_id (UUID)              | <-----+ (1 - 1) TutorProfile
+  | UNQ | email (Citext)              | <-----+ (1 - 1) StudentProfile
+  |     | password (String?)          | <-----+ (1 - 1) Wallet
+  |     | role (UserRole)             | <-----+ (1 - N) Booking
+  |     | status (UserStatus)         | <-----+ (1 - N) Transaction
+  |     | email_verified (Boolean)    | <-----+ (1 - N) Payout (processed_by)
+  |     | social_provider (String?)   | <-----+ (1 - N) Article (author_id)
+  |     | social_id (String?)         | <-----+ (1 - N) ArticleComment
+  |     | created_at (Timestamptz)    | <-----+ (1 - N) CourseComment
+>>>>>>> 3b91877 (fix: fix payout when tutor require and wait admin confirm)
   |     | updated_at (Timestamptz)    |
   |     | last_login_at (Timestamptz) |
   +-----------------------------------+

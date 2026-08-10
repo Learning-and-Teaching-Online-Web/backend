@@ -26,14 +26,24 @@ Module **Tutor & Student Profile** mở rộng thông tin chi tiết cho từng 
 |   tutor_profiles  |   |  student_profiles |
 +-------------------+   +-------------------+
 | PK | tutor_id     |   | PK | student_id   |
-| FK | user_id (1-1)|   | FK | user_id (1-1)|
-|    | bio          |   |    | grade_level  |
-|    | education    |   |    | goals        |
-|    | experience   |   |    | pref_subjects|
-|    | hourly_rate  |   |    | pref_mode    |
-|    | subjects     |   |    | budget_min   |
-|    | rating       |   |    | budget_max   |
-+-------------------+   +-------------------+
+| FK | user_id (1-1)|   | FK | user_id (1-1)| 
+|    | tutor_code   |   |    | full_name    |
+|    | full_name    |   |    | phone        |
+|    | phone        |   |    | avatar_url   |
+|    | avatar_url   |   |    | date_of_birth|
+|    | date_of_birth|   |    | gender       |
+|    | gender       |   |    | address_dtl  |
+|    | hometown     |   | FK | grade_id     |
+|    | curr_address |   |    | academic_lvl |
+|    | university   |   +-------------------+
+|    | major        |
+|    | current_role |
+|    | min_salary   |
+|    | exp_years    |
+|    | rating       |
+|    | teach_mode   |
+|    | verify_stat  |
++-------------------+
           |
           | (1 - N)
           v
@@ -74,19 +84,26 @@ Tách riêng khỏi `users` để tối ưu kích thước bảng `users` và ch
 | :--- | :--- | :--- | :--- |
 | `tutor_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính duy nhất định danh hồ sơ gia sư. |
 | `user_id` | `String` (UUID) | `@unique`, Khóa ngoại -> `users` | Liên kết 1-1 với tài khoản User. Xóa User thì tự động xóa hồ sơ gia sư (`onDelete: Cascade`). |
-| `bio` | `String?` | Tùy chọn | Giới thiệu chi tiết về phương pháp dạy, thế mạnh cá nhân. |
-| `education` | `String?` | Tùy chọn | Trình độ học vấn (VD: Thạc sĩ Toán học - ĐH Sư Phạm TP.HCM). |
-| `experience_years` | `Int?` | `@db.SmallInt`, Mặc định `0` | Số năm kinh nghiệm giảng dạy (dùng `SmallInt` tiết kiệm dung lượng). |
-| `hourly_rate` | `Decimal` | `@db.Decimal(10, 2)` | Mức học phí đề xuất trên 1 giờ dạy (VD: `250000.00` VND). Dùng `Decimal` đảm bảo chính xác khi tính toán doanh thu. |
-| `subjects` | `Json` | Mặc định `[]`, Index GIN | Mảng JSON lưu danh sách môn học dạy được (VD: `["Toán", "Vật Lý"]`). |
-| `specialties` | `Json?` | Mặc định `[]` | Mảng JSON lưu chuyên môn sâu (VD: `["Luyện thi ĐH 9+", "IELTS Speaking 8.0"]`). |
-| `rating` | `Decimal?` | `@db.Decimal(2, 1)`, Mặc định `0` | Điểm đánh giá trung bình từ 0.0 đến 5.0 (tự động tính từ các bài review của học sinh). |
-| `review_count` | `Int` | Mặc định `0` | Tổng số lượng đánh giá nhận được (lưu sẵn để tăng tốc hiển thị không cần COUNT liên tục). |
+| `tutor_code` | `String?` | `@unique` | Mã số gia sư cấp tự động (VD: GS7650). |
+| `full_name` | `String` | `@default("")` | Họ và tên đầy đủ của gia sư. |
+| `phone` | `String?` | Tùy chọn | Số điện thoại liên hệ. |
+| `avatar_url` | `String?` | Tùy chọn | Đường dẫn ảnh đại diện. |
+| `date_of_birth` | `DateTime?` | `@db.Date` | Ngày tháng năm sinh. |
+| `gender` | `String?` | Tùy chọn | Giới tính ("male", "female", "other"). |
+| `hometown` | `String?` | Tùy chọn | Nguyên quán (Tỉnh / Thành). |
+| `current_address` | `String?` | Tùy chọn | Địa chỉ hiện tại (Số nhà, đường, phường, quận...). |
+| `id_card_front_url` | `String?` | Tùy chọn | Đường dẫn ảnh CCCD mặt trước. |
+| `university` | `String?` | Tùy chọn | Trường đại học / cao đẳng đang học hoặc đã tốt nghiệp. |
+| `major` | `String?` | Tùy chọn | Ngành học (VD: Sư phạm Toán). |
+| `graduation_year` | `Int?` | Tùy chọn | Năm tốt nghiệp (VD: 2024). |
+| `current_role` | `String?` | Tùy chọn | Hiện là (Sinh viên, Giáo viên, Cử nhân, Kỹ sư...). |
+| `min_salary_requirement` | `String?` | Tùy chọn | Yêu cầu lương tối thiểu. |
+| `experience_years` | `Int?` | `@db.SmallInt`, Mặc định `0` | Số năm kinh nghiệm dạy học. |
+| `rating` | `Decimal?` | `@db.Decimal(2, 1)`, Mặc định `0` | Điểm đánh giá trung bình từ 0.0 đến 5.0. |
+| `review_count` | `Int` | Mặc định `0` | Tổng số lượng đánh giá nhận được. |
 | `teaching_mode` | `TeachingMode` | `@default(both)` | Hình thức nhận dạy (online, offline, both). |
-| `province` | `String?` | Tùy chọn | Tỉnh / Thành phố nhận dạy offline. |
-| `district` | `String?` | Tùy chọn | Quận / Huyện nhận dạy offline (dùng tìm kiếm gia sư quanh khu vực). |
 | `verified_status` | `VerificationStatus` | `@default(pending)` | Trạng thái xét duyệt hồ sơ từ Admin. |
-| `is_featured` | `Boolean` | `@default(false)` | Cờ đánh dấu gia sư xuất sắc / nổi bật để ưu tiên đề xuất trên trang chủ. |
+| `is_featured` | `Boolean` | `@default(false)` | Cờ đánh dấu gia sư xuất sắc / nổi bật. |
 | `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày tạo hồ sơ gia sư. |
 | `updated_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày cập nhật hồ sơ gần nhất. |
 
@@ -99,12 +116,16 @@ Lưu thông tin nhu cầu học tập làm đầu vào cho thuật toán AI gợ
 | :--- | :--- | :--- | :--- |
 | `student_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính duy nhất cho hồ sơ học sinh. |
 | `user_id` | `String` (UUID) | `@unique`, Khóa ngoại -> `users` | Liên kết 1-1 với tài khoản User. |
-| `grade_level` | `String?` | Tùy chọn | Cấp học hiện tại (VD: "Lớp 12", "Sinh viên năm 1", "Người đi làm"). |
-| `learning_goals` | `String?` | Tùy chọn | Mục tiêu học tập (VD: "Thi đỗ Đại học Bách Khoa", "Giao tiếp Tiếng Anh"). |
-| `preferred_subjects` | `Json?` | Mặc định `[]` | Danh sách môn học muốn tìm gia sư (dùng cho AI matching). |
-| `preferred_mode` | `TeachingMode?` | Tùy chọn | Hình thức mong muốn học (online hay offline). |
-| `budget_min` | `Decimal?` | `@db.Decimal(10, 2)` | Mức chi trả tối thiểu / giờ học. |
-| `budget_max` | `Decimal?` | `@db.Decimal(10, 2)` | Mức chi trả tối đa / giờ học (AI lọc gia sư có `hourly_rate` phù hợp với khoảng ngân sách này). |
+| `full_name` | `String` | `@default("")` | Họ và tên đầy đủ của học sinh. |
+| `phone` | `String?` | Tùy chọn | Số điện thoại liên hệ. |
+| `avatar_url` | `String?` | Tùy chọn | Đường dẫn ảnh đại diện. |
+| `date_of_birth` | `DateTime?` | `@db.Date` | Ngày tháng năm sinh. |
+| `gender` | `String?` | Tùy chọn | Giới tính ("male", "female", "other"). |
+| `address_detail` | `String?` | Tùy chọn | Địa chỉ chi tiết (Số nhà, đường...). |
+| `province` | `String?` | Tùy chọn | Tỉnh / Thành phố. |
+| `district` | `String?` | Tùy chọn | Quận / Huyện. |
+| `grade_id` | `String?` | `@db.Uuid`, Khóa ngoại -> `grades` | Liên kết tới khối lớp đang học. |
+| `academic_level` | `String?` | Tùy chọn | Học lực hiện tại ("Giỏi", "Khá", "Trung bình"). |
 | `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày tạo hồ sơ học sinh. |
 | `updated_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Ngày cập nhật hồ sơ gần nhất. |
 
