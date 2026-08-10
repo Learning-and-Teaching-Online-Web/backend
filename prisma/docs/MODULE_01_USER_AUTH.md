@@ -26,7 +26,6 @@ Module 1 bao gồm 3 bảng chính:
   +-----------------------------------+
   |               users               |
   +-----------------------------------+
-<<<<<<< HEAD
   | PK  | user_id (UUID)              | <-----+ (1 - 1) AdminProfile
   | UNQ | email (Citext)              | <-----+ (1 - 1) TutorProfile
   |     | password (String?)          | <-----+ (1 - 1) StudentProfile
@@ -34,23 +33,12 @@ Module 1 bao gồm 3 bảng chính:
   |     | status (UserStatus)         | <-----+ (1 - N) RefreshToken
   |     | email_verified (Boolean)    | <-----+ (1 - N) Booking
   |     | social_provider (String?)   | <-----+ (1 - N) Transaction
-  |     | social_id (String?)         | <-----+ (1 - N) Article
-  |     | verification_token (Str?)   |
-  |     | ver_token_expires (Tz?)     |
-  |     | reset_token (String?)       |
+  |     | social_id (String?)         | <-----+ (1 - N) Payout (processed_by)
+  |     | verification_token (Str?)   | <-----+ (1 - N) Article (author_id)
+  |     | ver_token_expires (Tz?)     | <-----+ (1 - N) ArticleComment
+  |     | reset_token (String?)       | <-----+ (1 - N) CourseComment
   |     | reset_token_expires (Tz?)   |
   |     | created_at (Timestamptz)    |
-=======
-  | PK  | user_id (UUID)              | <-----+ (1 - 1) TutorProfile
-  | UNQ | email (Citext)              | <-----+ (1 - 1) StudentProfile
-  |     | password (String?)          | <-----+ (1 - 1) Wallet
-  |     | role (UserRole)             | <-----+ (1 - N) Booking
-  |     | status (UserStatus)         | <-----+ (1 - N) Transaction
-  |     | email_verified (Boolean)    | <-----+ (1 - N) Payout (processed_by)
-  |     | social_provider (String?)   | <-----+ (1 - N) Article (author_id)
-  |     | social_id (String?)         | <-----+ (1 - N) ArticleComment
-  |     | created_at (Timestamptz)    | <-----+ (1 - N) CourseComment
->>>>>>> 3b91877 (fix: fix payout when tutor require and wait admin confirm)
   |     | updated_at (Timestamptz)    |
   |     | last_login_at (Timestamptz) |
   +-----------------------------------+
@@ -67,6 +55,7 @@ Module 1 bao gồm 3 bảng chính:
 |    | avatar_url|  |     | created_at  |
 |    | dob,gender|  +-------------------+
 |    | cccd      |
+|    | position  |
 +----------------+
 ```
 
@@ -87,6 +76,15 @@ Module 1 bao gồm 3 bảng chính:
   * `active`: Tài khoản đang hoạt động bình thường.
   * `suspended`: Tài khoản bị tạm khóa (do vi phạm quy định hoặc đang chờ xác minh).
   * `deleted`: Đã xóa tài khoản (Soft delete) — đánh dấu đã xóa nhưng vẫn giữ lại thông tin lịch sử giao dịch/học tập nhằm phục vụ đối soát.
+
+### 3.3. `AdminPosition` (Vị trí / Chức vụ Quản trị viên)
+* **Mục đích:** Phân loại chức vụ chuyên môn của các nhân viên Quản trị viên trong hệ thống.
+* **Các giá trị:**
+  * `super_admin`: Quản trị viên hệ thống (Quản lý toàn bộ hệ thống).
+  * `moderator`: Kiểm duyệt viên (Duyệt hồ sơ gia sư, bằng cấp, khóa học).
+  * `customer_support`: Chăm sóc & Hỗ trợ khách hàng.
+  * `content_manager`: Quản lý nội dung bài viết và truyền thông.
+  * `financial_manager`: Quản lý tài chính & xử lý rút tiền (Payouts).
 
 ---
 
@@ -128,6 +126,7 @@ Lưu trữ thông tin cá nhân của Quản trị viên (Admin), tách biệt k
 | `date_of_birth` | `DateTime?` | `@db.Date` | Ngày tháng năm sinh. |
 | `gender` | `String?` | Tùy chọn | Giới tính (`male`, `female`, `other`). |
 | `cccd` | `String?` | Tùy chọn | Căn cước công dân của Quản trị viên. |
+| `position` | `AdminPosition?` | Tùy chọn | Vị trí / Chức vụ nhân viên Quản trị viên (`super_admin`, `moderator`, `customer_support`, `content_manager`, `financial_manager`). |
 | `created_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Thời điểm tạo hồ sơ Quản trị viên. |
 | `updated_at` | `DateTime` | `@default(now())`, `@db.Timestamptz` | Thời điểm cập nhật thông tin mới nhất. |
 
