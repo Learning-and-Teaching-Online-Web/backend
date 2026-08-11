@@ -1,0 +1,533 @@
+<title>Luồng nghiệp vụ Offline Class — Escrow &amp; Hoàn tiền</title>
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --line: #dfe2e9;
+    --ink: #1a1d27;
+    --ink-soft: #565d6b;
+    --ink-faint: #838a98;
+    --accent: #33417f;
+    --accent-soft: #eef0fa;
+    --mono-tint: #eef0f5;
+
+    --st-pending-fg: #8a5a05;
+    --st-pending-bg: #fbf1da;
+    --st-active-fg: #0f6f57;
+    --st-active-bg: #e0f3ec;
+    --st-stop-fg: #a5382f;
+    --st-stop-bg: #fae4e1;
+    --st-neutral-fg: #3a5b8c;
+    --st-neutral-bg: #e7eef7;
+
+    color-scheme: light;
+  }
+
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #14161d;
+      --surface: #1b1e28;
+      --surface-raised: #21242f;
+      --line: #333747;
+      --ink: #e8e9ef;
+      --ink-soft: #a8adba;
+      --ink-faint: #767c8c;
+      --accent: #8892d8;
+      --accent-soft: #262a42;
+      --mono-tint: #20232d;
+
+      --st-pending-fg: #e0b256;
+      --st-pending-bg: #3a3016;
+      --st-active-fg: #6bd2ac;
+      --st-active-bg: #163229;
+      --st-stop-fg: #f0958c;
+      --st-stop-bg: #3a1e1c;
+      --st-neutral-fg: #93b3e6;
+      --st-neutral-bg: #1e2a3d;
+
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14161d;
+    --surface: #1b1e28;
+    --surface-raised: #21242f;
+    --line: #333747;
+    --ink: #e8e9ef;
+    --ink-soft: #a8adba;
+    --ink-faint: #767c8c;
+    --accent: #8892d8;
+    --accent-soft: #262a42;
+    --mono-tint: #20232d;
+
+    --st-pending-fg: #e0b256;
+    --st-pending-bg: #3a3016;
+    --st-active-fg: #6bd2ac;
+    --st-active-bg: #163229;
+    --st-stop-fg: #f0958c;
+    --st-stop-bg: #3a1e1c;
+    --st-neutral-fg: #93b3e6;
+    --st-neutral-bg: #1e2a3d;
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  code, .mono {
+    font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 32px;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  header p {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: 15.5px;
+  }
+
+  header p code { color: var(--accent); font-size: 0.94em; }
+
+  /* ---------- Section scaffolding ---------- */
+  section { display: flex; flex-direction: column; gap: 18px; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .section-num {
+    font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--ink-faint);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 10px;
+    flex-shrink: 0;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+  }
+
+  .section-sub {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 14.5px;
+    max-width: 68ch;
+  }
+
+  /* ---------- Legend strip ---------- */
+  .legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .legend-col {
+    background: var(--surface);
+    padding: 16px 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .legend-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .legend-items { display: flex; flex-direction: column; gap: 6px; }
+
+  .chip-row { display: flex; flex-direction: column; gap: 2px; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 5px;
+    letter-spacing: 0.01em;
+  }
+
+  .chip-def {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    padding-left: 1px;
+  }
+
+  .st-pending { color: var(--st-pending-fg); background: var(--st-pending-bg); }
+  .st-active  { color: var(--st-active-fg);  background: var(--st-active-bg); }
+  .st-stop    { color: var(--st-stop-fg);    background: var(--st-stop-bg); }
+  .st-neutral { color: var(--st-neutral-fg); background: var(--st-neutral-bg); }
+
+  /* ---------- Diagram card ---------- */
+  .diagram-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    overflow-x: auto;
+  }
+
+  .diagram-card pre.mermaid {
+    margin: 0;
+    min-width: 620px;
+  }
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+
+  figcaption {
+    font-size: 13px;
+    color: var(--ink-faint);
+    padding: 0 2px;
+  }
+
+  /* ---------- Refund comparison ---------- */
+  .refund-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 640px) {
+    .refund-grid { grid-template-columns: 1fr; }
+  }
+
+  .refund-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .refund-card .fault-label {
+    font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--st-stop-fg);
+    background: var(--st-stop-bg);
+    width: fit-content;
+    padding: 3px 9px;
+    border-radius: 5px;
+  }
+
+  .refund-card h3 {
+    margin: 0;
+    font-size: 15.5px;
+    font-weight: 700;
+  }
+
+  .split {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .split-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .split-label b {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .split-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--mono-tint);
+  }
+
+  .split-bar .seg-penalty { background: var(--st-stop-fg); opacity: 0.75; }
+  .split-bar .seg-refund { background: var(--st-active-fg); opacity: 0.8; }
+
+  .refund-note {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+
+  /* ---------- Footer ---------- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  footer code { color: var(--ink-soft); }
+</style>
+
+<div class="page">
+
+  <header>
+    <span class="eyebrow">Offline Class · Escrow &amp; Refund</span>
+    <h1>Luồng nghiệp vụ lớp học Offline</h1>
+    <p>
+      Toàn bộ đường đi của một lớp offline: từ lúc học viên đăng yêu cầu, qua bước
+      giữ chỗ (escrow) bắt buộc cả hai phía cùng đóng tiền, đến khi lớp được giao
+      (<code>OfflineClass</code>) và cửa sổ hoàn tiền 7 ngày đầu. Đây là bản đọc trực quan
+      của các state machine trong <code>schema.prisma</code>, Module 12.
+    </p>
+  </header>
+
+  <section aria-labelledby="legend-h">
+    <div class="section-head">
+      <h2 id="legend-h">Tra cứu nhanh trạng thái</h2>
+    </div>
+    <p class="section-sub">4 bảng, 4 vòng đời trạng thái riêng — dùng làm bảng tra khi đọc các sơ đồ bên dưới.</p>
+
+    <div class="legend-grid">
+      <div class="legend-col">
+        <span class="legend-title">ClassRequest</span>
+        <div class="legend-items">
+          <div class="chip-row"><span class="chip st-pending">PENDING_ADMIN</span><span class="chip-def">Chờ Admin duyệt nội dung</span></div>
+          <div class="chip-row"><span class="chip st-active">OPEN</span><span class="chip-def">Công khai / vừa được mở lại</span></div>
+          <div class="chip-row"><span class="chip st-pending">WAITING_PAYMENT</span><span class="chip-def">Chờ 2 bên đóng escrow</span></div>
+          <div class="chip-row"><span class="chip st-stop">REJECTED</span><span class="chip-def">Admin từ chối</span></div>
+          <div class="chip-row"><span class="chip st-stop">CANCELLED</span><span class="chip-def">Học viên tự hủy</span></div>
+          <div class="chip-row"><span class="chip st-stop">EXPIRED</span><span class="chip-def">Học viên trễ hạn — đóng hẳn</span></div>
+        </div>
+      </div>
+
+      <div class="legend-col">
+        <span class="legend-title">ClassApplication</span>
+        <div class="legend-items">
+          <div class="chip-row"><span class="chip st-pending">PENDING</span><span class="chip-def">Gia sư vừa ứng tuyển</span></div>
+          <div class="chip-row"><span class="chip st-active">APPROVED</span><span class="chip-def">Được Admin chọn</span></div>
+          <div class="chip-row"><span class="chip st-stop">REJECTED</span><span class="chip-def">Admin không chọn</span></div>
+          <div class="chip-row"><span class="chip st-stop">EXPIRED</span><span class="chip-def">Trễ hạn đóng phí nhận lớp</span></div>
+        </div>
+      </div>
+
+      <div class="legend-col">
+        <span class="legend-title">OfflineClassPayment (escrow)</span>
+        <div class="legend-items">
+          <div class="chip-row"><span class="chip st-pending">PENDING</span><span class="chip-def">Chưa đóng</span></div>
+          <div class="chip-row"><span class="chip st-active">PAID</span><span class="chip-def">Đã đóng, đang tạm giữ</span></div>
+          <div class="chip-row"><span class="chip st-neutral">REFUNDED</span><span class="chip-def">Hoàn 100%</span></div>
+          <div class="chip-row"><span class="chip st-neutral">PARTIALLY_REFUNDED</span><span class="chip-def">Hoàn sau khi trừ phạt</span></div>
+          <div class="chip-row"><span class="chip st-stop">EXPIRED</span><span class="chip-def">Chưa từng đóng, nghĩa vụ hủy</span></div>
+        </div>
+      </div>
+
+      <div class="legend-col">
+        <span class="legend-title">OfflineClass &amp; RefundTicket</span>
+        <div class="legend-items">
+          <div class="chip-row"><span class="chip st-active">ACTIVE</span><span class="chip-def">Lớp đang hoạt động</span></div>
+          <div class="chip-row"><span class="chip st-stop">CANCELLED</span><span class="chip-def">Bị hủy do sự cố 7 ngày</span></div>
+          <div class="chip-row"><span class="chip st-pending">TICKET: PENDING</span><span class="chip-def">Vừa gửi yêu cầu hủy</span></div>
+          <div class="chip-row"><span class="chip st-active">TICKET: APPROVED</span><span class="chip-def">Đã chốt lỗi &amp; số tiền</span></div>
+          <div class="chip-row"><span class="chip st-neutral">TICKET: COMPLETED</span><span class="chip-def">Đã chuyển tiền xong</span></div>
+          <div class="chip-row"><span class="chip st-stop">TICKET: REJECTED</span><span class="chip-def">Không đủ căn cứ</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="phase1-h">
+    <div class="section-head">
+      <span class="section-num">1</span>
+      <h2 id="phase1-h">Từ yêu cầu đến khi giao lớp</h2>
+    </div>
+    <p class="section-sub">
+      Escrow là điều kiện bắt buộc: <code>OfflineClass</code> chỉ được tạo ra khi CẢ HAI khoản tiền giữ chỗ
+      đều <code>PAID</code>. Nếu một bên trễ hạn, hệ thống rẽ theo bên có lỗi — gia sư trễ thì mở lại yêu cầu
+      cho người khác, học viên trễ thì đóng yêu cầu vĩnh viễn.
+    </p>
+    <div class="diagram-card">
+      <figure>
+        <pre class="mermaid">
+flowchart TD
+    A["Học viên tạo yêu cầu tìm gia sư"] --> A2[["ClassRequest: PENDING_ADMIN"]]
+    A2 --> B{"Admin duyệt nội dung?"}
+    B -- "Từ chối" --> B1[["REJECTED"]]
+    B -- "Duyệt" --> C[["ClassRequest: OPEN<br/>hiển thị công khai"]]
+    C --> D["Gia sư gửi đơn ứng tuyển"]
+    D --> D2[["ClassApplication: PENDING"]]
+    D2 --> E{"Admin chọn 1 gia sư?"}
+    E -- "Từ chối đơn" --> E1[["ClassApplication: REJECTED"]]
+    E -- "Chọn" --> F[["ClassApplication: APPROVED<br/>ClassRequest: WAITING_PAYMENT"]]
+    F --> G["Tạo 2 dòng OfflineClassPayment — PENDING<br/>STUDENT_TUITION · TUTOR_PLACEMENT_FEE"]
+    G --> H["Học viên đóng học phí tháng đầu"]
+    G --> I["Gia sư đóng phí nhận lớp"]
+    H --> J{"Trước hạn 48h,<br/>cả 2 đều PAID?"}
+    I --> J
+    J -- "Đúng" --> K[["OfflineClass: ACTIVE<br/>gán class_id vào 2 payment, xóa ClassRequest"]]
+    J -- "Học viên chưa đóng kịp" --> L["Escrow học viên → EXPIRED<br/>Escrow gia sư (nếu PAID) → REFUNDED"]
+    L --> L2[["ClassRequest: EXPIRED<br/>đóng vĩnh viễn"]]
+    J -- "Học viên đã đóng,<br/>gia sư chưa đóng kịp" --> M["Escrow gia sư → EXPIRED<br/>Escrow học viên (PAID) → REFUNDED"]
+    M --> M2[["ClassApplication: EXPIRED"]]
+    M2 -.mở lại, chờ gia sư khác.-> C
+        </pre>
+        <figcaption>Nhánh trễ hạn tách theo bên có lỗi: gia sư trễ → vòng lặp lại <code>OPEN</code>; học viên trễ → <code>EXPIRED</code> đóng hẳn.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="phase2-h">
+    <div class="section-head">
+      <span class="section-num">2</span>
+      <h2 id="phase2-h">7 ngày đầu &amp; xử lý hoàn tiền</h2>
+    </div>
+    <p class="section-sub">
+      Kể từ thời điểm giao lớp (<code>assigned_at</code>), hệ thống mở một cửa sổ 7 ngày
+      (<code>refund_deadline</code>) để xử lý sự cố qua <code>RefundTicket</code>. Ngoài khung này, lớp
+      không còn cơ chế hủy/hoàn tiền chuẩn.
+    </p>
+    <div class="diagram-card">
+      <figure>
+        <pre class="mermaid">
+flowchart TD
+    K[["OfflineClass: ACTIVE<br/>assigned_at = lúc giao lớp<br/>refund_deadline = +7 ngày"]] --> N{"Trong 7 ngày<br/>có phát sinh sự cố?"}
+    N -- "Không" --> N1["Lớp tiếp tục ACTIVE,<br/>không giới hạn thời gian"]
+    N -- "Có" --> O["Bên bị ảnh hưởng gửi yêu cầu hủy"]
+    O --> O2[["RefundTicket: PENDING"]]
+    O2 --> P{"Admin xác định fault_type"}
+    P -- "Không đủ căn cứ" --> T[["RefundTicket: REJECTED<br/>lớp vẫn ACTIVE"]]
+    P -- "STUDENT_FAULT" --> Q["Học viên: phạt 10%, hoàn 90%<br/>Gia sư: hoàn 100%"]
+    P -- "TUTOR_FAULT" --> R["Gia sư: phạt 20%, hoàn 80%<br/>Học viên: hoàn 100%"]
+    Q --> S[["RefundTicket: APPROVED → COMPLETED"]]
+    R --> S
+    S --> S2["2 dòng OfflineClassPayment →<br/>REFUNDED / PARTIALLY_REFUNDED"]
+    S2 --> S3[["OfflineClass: CANCELLED"]]
+        </pre>
+        <figcaption>Mọi khoản hoàn/phạt được snapshot lại trên chính <code>RefundTicket</code>, không tính lại về sau.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="split-h">
+    <div class="section-head">
+      <span class="section-num">3</span>
+      <h2 id="split-h">Quy tắc chia tiền khi có lỗi</h2>
+    </div>
+    <p class="section-sub">Hai kịch bản duy nhất Admin có thể kết luận — tỷ lệ phạt luôn rơi vào bên gây lỗi.</p>
+
+    <div class="refund-grid">
+      <div class="refund-card">
+        <span class="fault-label">STUDENT_FAULT</span>
+        <h3>Lỗi thuộc về Học viên</h3>
+
+        <div class="split">
+          <div class="split-label">Học viên — học phí tháng đầu <b>(phạt 10%)</b></div>
+          <div class="split-bar">
+            <div class="seg-penalty" style="width:10%"></div>
+            <div class="seg-refund" style="width:90%"></div>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="split-label">Gia sư — phí nhận lớp <b>(phạt 0%)</b></div>
+          <div class="split-bar">
+            <div class="seg-refund" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div class="refund-note">Học viên nhận lại 90%, hệ thống giữ 10% làm phí phạt. Gia sư được hoàn nguyên vẹn phí đã đóng.</div>
+      </div>
+
+      <div class="refund-card">
+        <span class="fault-label">TUTOR_FAULT</span>
+        <h3>Lỗi thuộc về Gia sư</h3>
+
+        <div class="split">
+          <div class="split-label">Gia sư — phí nhận lớp <b>(phạt 20%)</b></div>
+          <div class="split-bar">
+            <div class="seg-penalty" style="width:20%"></div>
+            <div class="seg-refund" style="width:80%"></div>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="split-label">Học viên — học phí tháng đầu <b>(phạt 0%)</b></div>
+          <div class="split-bar">
+            <div class="seg-refund" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div class="refund-note">Gia sư nhận lại 80%, hệ thống giữ 20% làm phí phạt. Học viên được hoàn nguyên vẹn học phí đã đóng.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Nguồn: <code>backend/prisma/schema.prisma</code> · Module 12</span>
+    <span>Tài liệu tham khảo nội bộ — không phải dữ liệu thời gian thực</span>
+  </footer>
+
+</div>

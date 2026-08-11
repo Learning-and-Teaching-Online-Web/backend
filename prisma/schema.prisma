@@ -43,7 +43,7 @@ enum AdminPosition {
 // ================================================================
 model User {
   // 1. Primary Key
-  user_id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
+  user_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
 
   // 2. Core Account Info
   email           String     @unique @db.Citext // Email đăng nhập
@@ -61,9 +61,9 @@ model User {
   reset_token_expires        DateTime? @db.Timestamptz // Thời gian hết hạn token đặt lại mật khẩu (2h)
 
   // 4. Timestamps
-  created_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản
-  updated_at      DateTime   @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
-  last_login_at   DateTime?  @db.Timestamptz // Lần đăng nhập cuối cùng
+  created_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo tài khoản
+  updated_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
+  last_login_at DateTime? @db.Timestamptz // Lần đăng nhập cuối cùng
 
   // Relations
   admin_profile   AdminProfile?
@@ -84,6 +84,10 @@ model User {
   payouts_processed  Payout[] // Các yêu cầu rút tiền mà Admin này đã duyệt/xử lý
   articles           Article[] // Các bài viết do người dùng (Gia sư/Admin) này tạo
 
+  offline_class_payments   OfflineClassPayment[] // Các khoản tiền giữ chỗ (escrow) mà user này có nghĩa vụ đóng (học phí nếu là học viên, phí nhận lớp nếu là gia sư)
+  refund_tickets_requested RefundTicket[]        @relation("RefundTicketRequester") // Các yêu cầu hủy/hoàn tiền do user này gửi
+  refund_tickets_processed RefundTicket[]        @relation("RefundTicketProcessor") // Các yêu cầu hủy/hoàn tiền mà Admin này đã duyệt/từ chối
+
   @@index([role, status], map: "idx_users_role_status")
   @@index([social_provider, social_id], map: "idx_users_social")
   @@map("users")
@@ -96,8 +100,8 @@ model User {
 // ================================================================
 model AdminProfile {
   // 1. Primary Key & Foreign Keys
-  admin_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
-  user_id       String         @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
+  admin_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID
+  user_id  String @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
 
   // 2. Personal Information
   full_name     String // Họ và tên đầy đủ
@@ -109,8 +113,8 @@ model AdminProfile {
   position      AdminPosition? // Vị trí / Chức vụ nhân viên Quản trị viên
 
   // 3. Timestamps
-  created_at    DateTime       @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
-  updated_at    DateTime       @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin mới nhất
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
@@ -123,8 +127,8 @@ model AdminProfile {
 // ================================================================
 model RefreshToken {
   // 1. Primary Key & Foreign Keys
-  token_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String   @db.Uuid
+  token_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id  String @db.Uuid
 
   // 2. Token Content & Expiry
   token      String   @unique
@@ -183,8 +187,8 @@ enum TimeSlot {
 // ================================================================
 model TutorProfile {
   // 1. Primary Key & Foreign Keys
-  tutor_id      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho hồ sơ gia sư
-  user_id       String    @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
+  tutor_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho hồ sơ gia sư
+  user_id  String @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
 
   // 2. Personal Identification
   tutor_code    String?   @unique // Mã số gia sư cấp tự động (VD: GS7650)
@@ -203,23 +207,23 @@ model TutorProfile {
   graduation_year        Int? // Năm tốt nghiệp (VD: 2024)
   current_role           String? // Hiện là (Sinh viên, Giáo viên, Cử nhân, Kỹ sư...)
   min_salary_requirement String? // Yêu cầu lương tối thiểu
-  experience_years       Int?               @default(0) @db.SmallInt // Số năm kinh nghiệm dạy học
+  experience_years       Int?    @default(0) @db.SmallInt // Số năm kinh nghiệm dạy học
 
   // 4. Status, Rating & Settings
-  rating           Decimal?           @default(0) @db.Decimal(2, 1) // Điểm đánh giá trung bình
-  review_count     Int                @default(0) // Tổng số lượng đánh giá nhận được
-  teaching_mode    TeachingMode       @default(both) // Hình thức dạy (online/offline/both)
-  verified_status  VerificationStatus @default(pending) // Trạng thái phê duyệt hồ sơ gia sư từ Admin
-  is_featured      Boolean            @default(false) // Đánh dấu gia sư nổi bật
+  rating          Decimal?           @default(0) @db.Decimal(2, 1) // Điểm đánh giá trung bình
+  review_count    Int                @default(0) // Tổng số lượng đánh giá nhận được
+  teaching_mode   TeachingMode       @default(both) // Hình thức dạy (online/offline/both)
+  verified_status VerificationStatus @default(pending) // Trạng thái phê duyệt hồ sơ gia sư từ Admin
+  is_featured     Boolean            @default(false) // Đánh dấu gia sư nổi bật
 
   // 5. Timestamps
-  created_at       DateTime           @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
-  updated_at       DateTime           @default(now()) @db.Timestamptz // Thời điểm cập nhật hồ sơ gần nhất
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo hồ sơ
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật hồ sơ gần nhất
 
   // Relations
   user            User                 @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
   certificates    TutorCertificate[]
-  grade_levels    GradeLevel[]         // Danh sách các khối lớp gia sư nhận dạy (Lớp 1 - 12)
+  grade_levels    GradeLevel[] // Danh sách các khối lớp gia sư nhận dạy (Lớp 1 - 12)
   available_times TutorAvailableTime[] // Bảng quan hệ danh sách lịch rảnh dạy gia sư chọn
   courses         Course[]
   payouts         Payout[]
@@ -227,8 +231,8 @@ model TutorProfile {
   favorites       Favorite[]
   matching_logs   MatchingLog[]
 
-  offline_classes   OfflineClass[]
-  applications      ClassApplication[]
+  offline_classes OfflineClass[]
+  applications    ClassApplication[]
 
   @@index([verified_status, rating(sort: Desc)], map: "idx_tutor_profiles_verified")
   @@map("tutor_profiles")
@@ -236,15 +240,15 @@ model TutorProfile {
 
 // Danh mục khối lớp cố định từ Lớp 1 đến Lớp 12
 enum GradeLevel {
-  grade_1  // Lớp 1
-  grade_2  // Lớp 2
-  grade_3  // Lớp 3
-  grade_4  // Lớp 4
-  grade_5  // Lớp 5
-  grade_6  // Lớp 6
-  grade_7  // Lớp 7
-  grade_8  // Lớp 8
-  grade_9  // Lớp 9
+  grade_1 // Lớp 1
+  grade_2 // Lớp 2
+  grade_3 // Lớp 3
+  grade_4 // Lớp 4
+  grade_5 // Lớp 5
+  grade_6 // Lớp 6
+  grade_7 // Lớp 7
+  grade_8 // Lớp 8
+  grade_9 // Lớp 9
   grade_10 // Lớp 10
   grade_11 // Lớp 11
   grade_12 // Lớp 12
@@ -257,15 +261,15 @@ enum GradeLevel {
 // ================================================================
 model TutorAvailableTime {
   // 1. Primary Key & Foreign Keys
-  time_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tutor_id    String    @db.Uuid
+  time_id  String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tutor_id String @db.Uuid
 
   // 2. Attributes
   day_of_week DayOfWeek // Ngày trong tuần (mon, tue, ..., sun)
   time_slot   TimeSlot // Buổi học (morning, afternoon, evening)
 
   // 3. Timestamps
-  created_at  DateTime  @default(now()) @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
 
   tutor TutorProfile @relation(fields: [tutor_id], references: [tutor_id], onDelete: Cascade)
 
@@ -283,9 +287,9 @@ model TutorAvailableTime {
 // ================================================================
 model StudentProfile {
   // 1. Primary Key & Foreign Keys
-  student_id     String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho hồ sơ học sinh
-  user_id        String      @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
-  grade_level    GradeLevel? // Khối lớp học của học sinh (Lớp 1 - 12)
+  student_id  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho hồ sơ học sinh
+  user_id     String      @unique @db.Uuid // Khóa ngoại liên kết 1-1 với users.user_id
+  grade_level GradeLevel? // Khối lớp học của học sinh (Lớp 1 - 12)
 
   // 2. Personal Information & Academic Level
   full_name      String    @default("") // Họ và tên đầy đủ
@@ -303,12 +307,12 @@ model StudentProfile {
   updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật gần nhất
 
   // Relations
-  user            User           @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  bookings        Booking[]
-  reviews         Review[]
-  favorites       Favorite[]
-  quiz_attempts   QuizAttempt[]
-  matching_logs   MatchingLog[]
+  user          User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  bookings      Booking[]
+  reviews       Review[]
+  favorites     Favorite[]
+  quiz_attempts QuizAttempt[]
+  matching_logs MatchingLog[]
 
   class_requests  ClassRequest[]
   offline_classes OfflineClass[]
@@ -323,23 +327,23 @@ model StudentProfile {
 // ================================================================
 model TutorCertificate {
   // 1. Primary Key & Foreign Keys
-  cert_id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho chứng chỉ
-  tutor_id          String             @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
-  verified_by_admin String?            @db.Uuid // FK tới users.user_id - Ghi nhận Admin nào đã duyệt bằng này
+  cert_id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho chứng chỉ
+  tutor_id          String  @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
+  verified_by_admin String? @db.Uuid // FK tới users.user_id - Ghi nhận Admin nào đã duyệt bằng này
 
   // 2. Certificate Details
-  title             String // Tên bằng cấp / chứng chỉ (VD: Bằng Thạc sĩ Sư Phạm, IELTS 8.0)
-  file_url          String // Đường dẫn lưu file scan bằng cấp (lưu trên CDN/Cloud)
-  file_type         String? // Định dạng file (PDF, PNG, JPG)
-  issued_by         String? // Nơi cấp (VD: Đại học Quốc Gia, British Council)
-  issued_date       DateTime?          @db.Date // Ngày cấp bằng (chỉ lưu ngày)
-  expiry_date       DateTime?          @db.Date // Ngày hết hạn chứng chỉ (nếu có, VD: IELTS hết hạn sau 2 năm)
-  status            VerificationStatus @default(pending) // Trạng thái xét duyệt (pending, approved, rejected)
-  admin_note        String? // Ghi chú của Admin (bắt buộc điền lý do khi từ chối/rejected)
+  title       String // Tên bằng cấp / chứng chỉ (VD: Bằng Thạc sĩ Sư Phạm, IELTS 8.0)
+  file_url    String // Đường dẫn lưu file scan bằng cấp (lưu trên CDN/Cloud)
+  file_type   String? // Định dạng file (PDF, PNG, JPG)
+  issued_by   String? // Nơi cấp (VD: Đại học Quốc Gia, British Council)
+  issued_date DateTime?          @db.Date // Ngày cấp bằng (chỉ lưu ngày)
+  expiry_date DateTime?          @db.Date // Ngày hết hạn chứng chỉ (nếu có, VD: IELTS hết hạn sau 2 năm)
+  status      VerificationStatus @default(pending) // Trạng thái xét duyệt (pending, approved, rejected)
+  admin_note  String? // Ghi chú của Admin (bắt buộc điền lý do khi từ chối/rejected)
 
   // 3. Timestamps
-  created_at        DateTime           @default(now()) @db.Timestamptz // Ngày upload
-  updated_at        DateTime           @default(now()) @db.Timestamptz // Ngày cập nhật trạng thái duyệt
+  created_at DateTime @default(now()) @db.Timestamptz // Ngày upload
+  updated_at DateTime @default(now()) @db.Timestamptz // Ngày cập nhật trạng thái duyệt
 
   // Relations
   tutor TutorProfile @relation(fields: [tutor_id], references: [tutor_id], onDelete: Cascade)
@@ -376,12 +380,12 @@ enum CourseStatus {
 // ================================================================
 model Subject {
   // 1. Primary Key
-  subject_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho môn học
+  subject_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho môn học
 
   // 2. Attributes
-  name       String   @unique // Tên môn học (VD: "Toán học", "Vật lý", "Tiếng Anh")
-  code       String?  @unique // Mã môn học (VD: "MATH", "PHYS", "ENG")
-  is_active  Boolean  @default(true) // Trạng thái kích hoạt (true: đang hoạt động, false: ẩn)
+  name      String  @unique // Tên môn học (VD: "Toán học", "Vật lý", "Tiếng Anh")
+  code      String? @unique // Mã môn học (VD: "MATH", "PHYS", "ENG")
+  is_active Boolean @default(true) // Trạng thái kích hoạt (true: đang hoạt động, false: ẩn)
 
   // 3. Timestamps
   created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo môn học
@@ -400,29 +404,29 @@ model Subject {
 // ================================================================
 model Course {
   // 1. Primary Key & Foreign Keys
-  course_id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho khóa học
-  tutor_id         String       @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (Xóa tutor -> xóa khóa học)
-  subject_id       String?      @db.Uuid // Khóa ngoại liên kết tới subjects.subject_id
+  course_id  String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho khóa học
+  tutor_id   String  @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (Xóa tutor -> xóa khóa học)
+  subject_id String? @db.Uuid // Khóa ngoại liên kết tới subjects.subject_id
 
   // 2. Course Details
-  title            String // Tên khóa học (VD: "Toán 12 luyện thi THPT Quốc Gia")
-  description      String? // Mô tả nội dung, mục tiêu kiến thức & phương pháp giảng dạy
-  level            String? // Trình độ yêu cầu (VD: "Cơ bản", "Nâng cao", "Luyện thi 9+")
-  type             CourseType   @default(online) // Loại khóa học (online: live trực tuyến theo lịch, video: video pre-recorded tự học)
-  status           CourseStatus @default(draft) // Trạng thái khóa học (draft, published, hidden, archived)
-  thumbnail_url    String? // Đường dẫn ảnh đại diện khóa học (hiển thị trên trang danh sách/tìm kiếm)
+  title         String // Tên khóa học (VD: "Toán 12 luyện thi THPT Quốc Gia")
+  description   String? // Mô tả nội dung, mục tiêu kiến thức & phương pháp giảng dạy
+  level         String? // Trình độ yêu cầu (VD: "Cơ bản", "Nâng cao", "Luyện thi 9+")
+  type          CourseType   @default(online) // Loại khóa học (online: live trực tuyến theo lịch, video: video pre-recorded tự học)
+  status        CourseStatus @default(draft) // Trạng thái khóa học (draft, published, hidden, archived)
+  thumbnail_url String? // Đường dẫn ảnh đại diện khóa học (hiển thị trên trang danh sách/tìm kiếm)
 
   // 3. Schedule & Pricing Parameters
-  price            Decimal      @db.Decimal(10, 2) // Học phí trọn gói khóa học (dùng Decimal tránh sai số tiền tệ)
-  start_date       DateTime?    @db.Date // Ngày bắt đầu / khai giảng khóa Online
+  price            Decimal   @db.Decimal(10, 2) // Học phí trọn gói khóa học (dùng Decimal tránh sai số tiền tệ)
+  start_date       DateTime? @db.Date // Ngày bắt đầu / khai giảng khóa Online
   schedule_time    String? // Giờ bắt đầu mỗi buổi học (VD: "07:00", "19:30") — kết hợp với course_days để generate lịch
-  duration_minutes Int          @default(60) @db.SmallInt // Thời lượng mỗi buổi học tính bằng phút (VD: 60, 90, 120)
-  max_students     Int          @default(1) @db.SmallInt // Số học sinh tối đa trong 1 lớp (1 = dạy 1-1, >1 = dạy nhóm)
-  total_sessions   Int          @default(1) @db.SmallInt // Tổng số buổi học trong toàn bộ khóa (VD: 10 buổi, 20 buổi)
+  duration_minutes Int       @default(60) @db.SmallInt // Thời lượng mỗi buổi học tính bằng phút (VD: 60, 90, 120)
+  max_students     Int       @default(1) @db.SmallInt // Số học sinh tối đa trong 1 lớp (1 = dạy 1-1, >1 = dạy nhóm)
+  total_sessions   Int       @default(1) @db.SmallInt // Tổng số buổi học trong toàn bộ khóa (VD: 10 buổi, 20 buổi)
 
   // 4. Timestamps
-  created_at       DateTime     @default(now()) @db.Timestamptz // Thời điểm tạo khóa học
-  updated_at       DateTime     @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin gần nhất
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo khóa học
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật thông tin gần nhất
 
   // Relations
   tutor            TutorProfile     @relation(fields: [tutor_id], references: [tutor_id], onDelete: Cascade)
@@ -445,7 +449,7 @@ model Course {
 
 // Trạng thái của từng buổi học trong khóa online
 enum SessionStatus {
-  upcoming  // Buổi học chưa diễn ra
+  upcoming // Buổi học chưa diễn ra
   completed // Gia sư đã dạy xong buổi này
   cancelled // Buổi bị hủy (gia sư xin hoãn hoặc sự cố)
 }
@@ -458,8 +462,8 @@ enum SessionStatus {
 // ================================================================
 model CourseDay {
   // 1. Primary Key & Foreign Keys
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  course_id   String    @db.Uuid // FK → courses.course_id
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id String @db.Uuid // FK → courses.course_id
 
   // 2. Day of Week
   day_of_week DayOfWeek // Ngày học trong tuần (mon, tue, wed, thu, fri, sat, sun)
@@ -478,18 +482,18 @@ model CourseDay {
 // ================================================================
 model CourseLesson {
   // 1. Primary Key & Foreign Keys
-  lesson_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài học
-  course_id   String   @db.Uuid // Khóa ngoại liên kết tới courses.course_id
+  lesson_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài học
+  course_id String @db.Uuid // Khóa ngoại liên kết tới courses.course_id
 
   // 2. Lesson Details
   title       String // Tên tiêu đề bài giảng / bài học
   description String? // Mô tả ngắn gọn nội dung bài học
   video_url   String // Đường dẫn xem Video bài giảng (lưu trên Cloud Storage / CDN)
-  order_index Int      @default(1) // Thứ tự sắp xếp bài học trong khóa (1, 2, 3...)
+  order_index Int     @default(1) // Thứ tự sắp xếp bài học trong khóa (1, 2, 3...)
 
   // 3. Timestamps
-  created_at  DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bài học
-  updated_at  DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật bài học gần nhất
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bài học
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật bài học gần nhất
 
   course Course @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
 
@@ -505,8 +509,8 @@ model CourseLesson {
 // ================================================================
 model CourseSchedule {
   // 1. Primary Key & Foreign Keys
-  schedule_id    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho buổi học
-  course_id      String        @db.Uuid // Khóa ngoại liên kết tới courses.course_id
+  schedule_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho buổi học
+  course_id   String @db.Uuid // Khóa ngoại liên kết tới courses.course_id
 
   // 2. Schedule Details & Slots
   session_number Int           @default(0) @db.SmallInt // Thứ tự buổi học trong khóa (1, 2, ..., total_sessions)
@@ -517,7 +521,7 @@ model CourseSchedule {
   status         SessionStatus @default(upcoming) // Trạng thái buổi học
 
   // 3. Timestamps
-  created_at     DateTime      @default(now()) @db.Timestamptz // Thời điểm tạo buổi học
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo buổi học
 
   // Relations
   course Course @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
@@ -535,17 +539,17 @@ model CourseSchedule {
 // Phương thức thanh toán
 enum PaymentMethod {
   zalopay // Thanh toán qua cổng ZaloPay
-  wallet  // Thanh toán bằng Ví nội bộ hệ thống
-  mock    // Thanh toán giả lập (dùng cho dev/demo)
+  wallet // Thanh toán bằng Ví nội bộ hệ thống
+  mock // Thanh toán giả lập (dùng cho dev/demo)
 }
 
 // Trạng thái của Booking (tiến độ tổng thể đặt lịch)
 enum BookingStatus {
-  pending   // Chờ xác nhận: Vừa đặt, đang chờ gia sư xác nhận hoặc chờ học sinh hoàn tất thanh toán
+  pending // Chờ xác nhận: Vừa đặt, đang chờ gia sư xác nhận hoặc chờ học sinh hoàn tất thanh toán
   confirmed // Đã xác nhận: Học sinh đã thanh toán thành công, lịch học chính thức được duyệt
   completed // Đã hoàn thành: Tất cả các buổi học trong khóa đã dạy xong
   cancelled // Đã hủy: Lịch đặt bị hủy bởi học sinh hoặc gia sư
-  refunded  // Đã hoàn tiền: Booking bị hủy hợp lệ và tiền đã được trả lại cho học sinh
+  refunded // Đã hoàn tiền: Booking bị hủy hợp lệ và tiền đã được trả lại cho học sinh
 }
 
 // Trạng thái thanh toán của Booking
@@ -580,10 +584,10 @@ enum PayoutStatus {
 // ================================================================
 model Booking {
   // 1. Primary Key & Foreign Keys
-  booking_id       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho đơn đặt lịch
-  student_id       String        @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id
-  course_id        String        @db.Uuid // Khóa ngoại liên kết tới courses.course_id
-  cancelled_by     String?       @db.Uuid // FK tới users.user_id - Ghi nhận ai là người bấm hủy (học sinh hay gia sư)
+  booking_id   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID riêng cho đơn đặt lịch
+  student_id   String  @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id
+  course_id    String  @db.Uuid // Khóa ngoại liên kết tới courses.course_id
+  cancelled_by String? @db.Uuid // FK tới users.user_id - Ghi nhận ai là người bấm hủy (học sinh hay gia sư)
 
   // 2. Booking Status & Notes
   status           BookingStatus @default(pending) // Trạng thái tiến độ booking (pending -> confirmed -> completed)
@@ -592,14 +596,14 @@ model Booking {
   cancelled_reason String? // Lý do hủy booking (bắt buộc khi trạng thái = cancelled)
 
   // 3. Financial Amount
-  total_amount     Decimal       @db.Decimal(10, 2) // Tổng tiền học phí cần thanh toán (VND)
-  platform_fee     Decimal       @default(0) @db.Decimal(10, 2) // Tiền hoa hồng hệ thống thu (VD: 10% của total_amount)
-  currency         String        @default("VND") // Đơn vị tiền tệ (mặc định VND)
+  total_amount Decimal @db.Decimal(10, 2) // Tổng tiền học phí cần thanh toán (VND)
+  platform_fee Decimal @default(0) @db.Decimal(10, 2) // Tiền hoa hồng hệ thống thu (VD: 10% của total_amount)
+  currency     String  @default("VND") // Đơn vị tiền tệ (mặc định VND)
 
   // 4. Timestamps
-  cancelled_at     DateTime?     @db.Timestamptz // Thời điểm thực hiện hủy booking
-  created_at       DateTime      @default(now()) @db.Timestamptz // Thời điểm tạo đơn đặt lịch
-  updated_at       DateTime      @default(now()) @db.Timestamptz // Thời điểm cập nhật trạng thái mới nhất
+  cancelled_at DateTime? @db.Timestamptz // Thời điểm thực hiện hủy booking
+  created_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo đơn đặt lịch
+  updated_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật trạng thái mới nhất
 
   // Relations
   student         StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -621,15 +625,15 @@ model Booking {
 // ================================================================
 model Transaction {
   // 1. Primary Key & Foreign Keys
-  transaction_id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho giao dịch
-  booking_id            String?           @db.Uuid // Khóa ngoại liên kết tới bookings.booking_id (nullable: giao dịch nội bộ không có booking)
-  user_id               String            @db.Uuid // Khóa ngoại liên kết tới users.user_id (người thực hiện thanh toán)
+  transaction_id String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho giao dịch
+  booking_id     String? @db.Uuid // Khóa ngoại liên kết tới bookings.booking_id (nullable: giao dịch nội bộ không có booking)
+  user_id        String  @db.Uuid // Khóa ngoại liên kết tới users.user_id (người thực hiện thanh toán)
 
   // 2. Transaction Details & Amount
-  amount                Decimal           @db.Decimal(10, 2) // Số tiền thanh toán thực tế (VND)
-  payment_method        PaymentMethod     @default(zalopay) // Phương thức thanh toán (zalopay | wallet)
-  description           String? // Mô tả giao dịch (VD: "Phí nhận lớp MS:89513", "Nạp tiền thủ công", "Học phí Toán 12")
-  status                TransactionStatus @default(pending) // Trạng thái giao dịch (pending -> success / failed)
+  amount         Decimal           @db.Decimal(10, 2) // Số tiền thanh toán thực tế (VND)
+  payment_method PaymentMethod     @default(zalopay) // Phương thức thanh toán (zalopay | wallet)
+  description    String? // Mô tả giao dịch (VD: "Phí nhận lớp MS:89513", "Nạp tiền thủ công", "Học phí Toán 12")
+  status         TransactionStatus @default(pending) // Trạng thái giao dịch (pending -> success / failed)
 
   // 3. Payment Gateway Callback Data
   zalopay_order_id      String? // AppTransID do hệ thống gửi sang ZaloPay để tạo đơn
@@ -637,13 +641,15 @@ model Transaction {
   zalopay_callback_data Json? // Mảng JSON lưu nguyên bản dữ liệu callback từ ZaloPay (phục vụ đối soát/audit)
 
   // 4. Timestamps
-  paid_at               DateTime?         @db.Timestamptz // Thời điểm xác nhận giao dịch thành công
-  created_at            DateTime          @default(now()) @db.Timestamptz // Thời điểm tạo giao dịch
-  updated_at            DateTime          @default(now()) @db.Timestamptz // Thời điểm cập nhật trạng thái
+  paid_at    DateTime? @db.Timestamptz // Thời điểm xác nhận giao dịch thành công
+  created_at DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo giao dịch
+  updated_at DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật trạng thái
 
   // Relations
   booking Booking? @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
   user    User     @relation(fields: [user_id], references: [user_id])
+
+  offline_class_payment OfflineClassPayment? // Khoản tiền giữ chỗ (escrow) mà giao dịch này thực hiện thanh toán, nếu có (quan hệ 1-1 ngược từ OfflineClassPayment.transaction_id)
 
   @@index([booking_id], map: "idx_transactions_booking")
   @@index([user_id, created_at(sort: Desc)], map: "idx_transactions_user")
@@ -657,17 +663,17 @@ model Transaction {
 // ================================================================
 model Wallet {
   // 1. Primary Key & Foreign Keys
-  wallet_id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của ví
-  user_id        String   @unique @db.Uuid // Khóa ngoại 1-1 với users.user_id (mỗi user chỉ có 1 ví duy nhất)
+  wallet_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của ví
+  user_id   String @unique @db.Uuid // Khóa ngoại 1-1 với users.user_id (mỗi user chỉ có 1 ví duy nhất)
 
   // 2. Balance & Currency
-  balance        Decimal  @default(0) @db.Decimal(10, 2) // Số dư khả dụng hiện tại (VND) = tổng tiền - frozen_balance
-  frozen_balance Decimal  @default(0) @db.Decimal(10, 2) // Số dư đang bị hold bởi Payout đang xử lý (pending/processing)
-  currency       String   @default("VND") // Đơn vị tiền tệ
+  balance        Decimal @default(0) @db.Decimal(10, 2) // Số dư khả dụng hiện tại (VND) = tổng tiền - frozen_balance
+  frozen_balance Decimal @default(0) @db.Decimal(10, 2) // Số dư đang bị hold bởi Payout đang xử lý (pending/processing)
+  currency       String  @default("VND") // Đơn vị tiền tệ
 
   // 3. Timestamps
-  created_at     DateTime @default(now()) @db.Timestamptz // Thời điểm khởi tạo ví
-  updated_at     DateTime @default(now()) @db.Timestamptz // Thời điểm biến động số dư gần nhất
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm khởi tạo ví
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm biến động số dư gần nhất
 
   // Relations
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
@@ -682,9 +688,9 @@ model Wallet {
 // ================================================================
 model Payout {
   // 1. Primary Key & Foreign Keys
-  payout_id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của đợt rút tiền
-  tutor_id            String       @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
-  processed_by        String?      @db.Uuid // FK tới users.user_id - Admin nào đã duyệt/xử lý yêu cầu này
+  payout_id    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID của đợt rút tiền
+  tutor_id     String  @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
+  processed_by String? @db.Uuid // FK tới users.user_id - Admin nào đã duyệt/xử lý yêu cầu này
 
   // 2. Amount & Bank Details
   amount              Decimal      @db.Decimal(10, 2) // Số tiền gia sư yêu cầu rút (VND)
@@ -695,13 +701,13 @@ model Payout {
   admin_note          String? // Ghi chú của Admin khi xử lý (bắt buộc khi failed)
 
   // 3. Settlement Period & Timestamps
-  period_start        DateTime?    @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
-  period_end          DateTime?    @db.Date // Ngày kết thúc kỳ đối soát doanh thu
-  processed_at        DateTime?    @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
-  created_at          DateTime     @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
+  period_start DateTime? @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
+  period_end   DateTime? @db.Date // Ngày kết thúc kỳ đối soát doanh thu
+  processed_at DateTime? @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
+  created_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
 
   // Relations
-  tutor          TutorProfile @relation(fields: [tutor_id], references: [tutor_id])
+  tutor           TutorProfile @relation(fields: [tutor_id], references: [tutor_id])
   processed_admin User?        @relation(fields: [processed_by], references: [user_id], onDelete: SetNull)
 
   @@index([tutor_id, created_at(sort: Desc)], map: "idx_payouts_tutor")
@@ -720,22 +726,22 @@ model Payout {
 // ================================================================
 model Review {
   // 1. Primary Key & Foreign Keys
-  review_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho đánh giá
-  booking_id      String   @unique @db.Uuid // Khóa ngoại 1-1 với bookings.booking_id (chống đánh giá trùng lập)
-  student_id      String   @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (người viết review)
-  tutor_id        String   @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (gia sư nhận review)
+  review_id  String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho đánh giá
+  booking_id String @unique @db.Uuid // Khóa ngoại 1-1 với bookings.booking_id (chống đánh giá trùng lập)
+  student_id String @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (người viết review)
+  tutor_id   String @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (gia sư nhận review)
 
   // 2. Ratings & Comment
-  rating          Int      @db.SmallInt // Điểm số đánh giá tổng thể (thang điểm 1 -> 5 sao)
-  professionalism Int?     @db.SmallInt // Điểm tiêu chí: Trình độ chuyên môn & Phương pháp giảng dạy (1-5 sao)
-  communication   Int?     @db.SmallInt // Điểm tiêu chí: Khả năng giao tiếp & Truyền đạt kiến thức (1-5 sao)
-  punctuality     Int?     @db.SmallInt // Điểm tiêu chí: Sự đúng giờ & Tác phong làm việc (1-5 sao)
+  rating          Int     @db.SmallInt // Điểm số đánh giá tổng thể (thang điểm 1 -> 5 sao)
+  professionalism Int?    @db.SmallInt // Điểm tiêu chí: Trình độ chuyên môn & Phương pháp giảng dạy (1-5 sao)
+  communication   Int?    @db.SmallInt // Điểm tiêu chí: Khả năng giao tiếp & Truyền đạt kiến thức (1-5 sao)
+  punctuality     Int?    @db.SmallInt // Điểm tiêu chí: Sự đúng giờ & Tác phong làm việc (1-5 sao)
   comment         String? // Nội dung nhận xét bằng văn bản của học sinh
-  is_visible      Boolean  @default(true) // Trạng thái hiển thị (true = công khai, false = tạm ẩn do vi phạm quy chuẩn)
+  is_visible      Boolean @default(true) // Trạng thái hiển thị (true = công khai, false = tạm ẩn do vi phạm quy chuẩn)
 
   // 3. Timestamps
-  created_at      DateTime @default(now()) @db.Timestamptz // Thời điểm tạo đánh giá
-  updated_at      DateTime @default(now()) @db.Timestamptz // Thời điểm chỉnh sửa đánh giá
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo đánh giá
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm chỉnh sửa đánh giá
 
   // Relations
   booking Booking        @relation(fields: [booking_id], references: [booking_id])
@@ -754,12 +760,12 @@ model Review {
 // ================================================================
 model Favorite {
   // 1. Primary Key & Foreign Keys
-  favorite_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho mục yêu thích
-  student_id  String   @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id
-  tutor_id    String   @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
+  favorite_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho mục yêu thích
+  student_id  String @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id
+  tutor_id    String @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id
 
   // 2. Timestamps
-  created_at  DateTime @default(now()) @db.Timestamptz // Thời điểm bấm lưu gia sư yêu thích
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm bấm lưu gia sư yêu thích
 
   // Relations
   student StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -778,21 +784,21 @@ model Favorite {
 // ================================================================
 model MatchingLog {
   // 1. Primary Key & Foreign Keys
-  log_id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi log AI
-  student_id        String   @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (người nhận gợi ý)
-  tutor_id          String   @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (gia sư được AI đề xuất)
+  log_id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi log AI
+  student_id String @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (người nhận gợi ý)
+  tutor_id   String @db.Uuid // Khóa ngoại liên kết tới tutor_profiles.tutor_id (gia sư được AI đề xuất)
 
   // 2. Recommendation Metadata & Interaction Flags
   match_score       Decimal? @db.Decimal(5, 2) // Điểm độ phù hợp tính bằng % do AI tính (VD: 95.50%)
   algorithm_version String? // Phiên bản thuật toán AI Matching (VD: "v1.0-content-based", "v2.0-hybrid")
   factors_json      Json? // Mảng JSON lưu chi tiết trọng số lý do ghép cặp (VD: {"subject_match": 1.0, "budget_match": 0.85})
-  is_clicked        Boolean   @default(false) // Cờ ghi nhận học sinh có bấm vào xem hồ sơ gia sư này không
-  is_booked         Boolean   @default(false) // Cờ ghi nhận học sinh có thực hiện đặt lịch sau gợi ý không
+  is_clicked        Boolean  @default(false) // Cờ ghi nhận học sinh có bấm vào xem hồ sơ gia sư này không
+  is_booked         Boolean  @default(false) // Cờ ghi nhận học sinh có thực hiện đặt lịch sau gợi ý không
 
   // 3. Timestamps
-  clicked_at        DateTime? @db.Timestamptz // Thời điểm học sinh bấm vào xem hồ sơ (null nếu chưa click)
-  booked_at         DateTime? @db.Timestamptz // Thời điểm học sinh đặt lịch sau gợi ý (null nếu chưa book)
-  created_at        DateTime  @default(now()) @db.Timestamptz // Thời điểm AI đưa ra gợi ý
+  clicked_at DateTime? @db.Timestamptz // Thời điểm học sinh bấm vào xem hồ sơ (null nếu chưa click)
+  booked_at  DateTime? @db.Timestamptz // Thời điểm học sinh đặt lịch sau gợi ý (null nếu chưa book)
+  created_at DateTime  @default(now()) @db.Timestamptz // Thời điểm AI đưa ra gợi ý
 
   // Relations
   student StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -814,9 +820,9 @@ model MatchingLog {
 // ================================================================
 model Document {
   // 1. Primary Key & Foreign Keys
-  doc_id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho tài liệu
-  course_id      String    @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa tài liệu)
-  uploaded_by    String    @db.Uuid // Khóa ngoại liên kết tới users.user_id (người tải tài liệu lên)
+  doc_id      String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho tài liệu
+  course_id   String @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa tài liệu)
+  uploaded_by String @db.Uuid // Khóa ngoại liên kết tới users.user_id (người tải tài liệu lên)
 
   // 2. Document Content & Storage
   title          String // Tên tiêu đề của tài liệu (VD: "Giáo trình Giải tích 12 - Chương 1")
@@ -824,12 +830,12 @@ model Document {
   file_url       String // Đường dẫn lưu file đính kèm thực tế trên Cloud Storage
   file_type      String // Phân loại định dạng tệp tin ("pdf", "docx", "pptx", "txt"...)
   extracted_text String? // Nội dung văn bản thô bóc tách từ file PDF/DOCX (dùng cho thuật toán RAG)
-  metadata       Json?     @default("{}") // Mảng JSON chứa thông tin phụ (VD: {"page_count": 45, "author": "Nguyễn Văn A"})
-  is_indexed     Boolean   @default(false) // Trạng thái đã cắt chunk và vector hóa xong chưa (false = chưa, true = sẵn sàng RAG)
+  metadata       Json?   @default("{}") // Mảng JSON chứa thông tin phụ (VD: {"page_count": 45, "author": "Nguyễn Văn A"})
+  is_indexed     Boolean @default(false) // Trạng thái đã cắt chunk và vector hóa xong chưa (false = chưa, true = sẵn sàng RAG)
 
   // 3. Timestamps
-  indexed_at     DateTime? @db.Timestamptz // Thời điểm hoàn tất đánh chỉ mục vector
-  created_at     DateTime  @default(now()) @db.Timestamptz // Thời điểm upload tài liệu
+  indexed_at DateTime? @db.Timestamptz // Thời điểm hoàn tất đánh chỉ mục vector
+  created_at DateTime  @default(now()) @db.Timestamptz // Thời điểm upload tài liệu
 
   // Relations
   course Course          @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
@@ -848,8 +854,8 @@ model Document {
 // ================================================================
 model DocumentChunk {
   // 1. Primary Key & Foreign Keys
-  chunk_id    String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho đoạn chunk
-  doc_id      String                       @db.Uuid // Khóa ngoại liên kết tới documents.doc_id (Xóa tài liệu gốc -> xóa các chunk)
+  chunk_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho đoạn chunk
+  doc_id   String @db.Uuid // Khóa ngoại liên kết tới documents.doc_id (Xóa tài liệu gốc -> xóa các chunk)
 
   // 2. Chunk Data & Vector Embedding
   content     String // Nội dung văn bản của đoạn chunk đã được cắt nhỏ
@@ -858,7 +864,7 @@ model DocumentChunk {
   embedding   Unsupported("vector(1536)")? // Vector nhúng 1536 chiều sinh từ OpenAI/Gemini Embedding API (pgvector)
 
   // 3. Timestamps
-  created_at  DateTime                     @default(now()) @db.Timestamptz // Thời điểm tạo chunk
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo chunk
 
   // Relations
   document Document @relation(fields: [doc_id], references: [doc_id], onDelete: Cascade)
@@ -874,19 +880,19 @@ model DocumentChunk {
 // ================================================================
 model AIConversation {
   // 1. Primary Key & Foreign Keys
-  conversation_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi tin nhắn AI
-  user_id         String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (người thực hiện hỏi AI)
-  course_id       String?  @db.Uuid // FK tới courses.course_id - Nếu hỏi AI trong phạm vi khóa học
+  conversation_id String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi tin nhắn AI
+  user_id         String  @db.Uuid // Khóa ngoại liên kết tới users.user_id (người thực hiện hỏi AI)
+  course_id       String? @db.Uuid // FK tới courses.course_id - Nếu hỏi AI trong phạm vi khóa học
 
   // 2. Message Content & AI Parameters
-  role            String // Vai trò người gửi ("user" = câu hỏi học sinh, "assistant" = câu trả lời AI, "system" = prompt hệ thống)
-  message         String // Nội dung văn bản của câu hỏi hoặc câu trả lời AI
-  model_used      String? // Tên mô hình AI được sử dụng (VD: "gpt-4o", "gemini-1.5-pro")
-  tokens_used     Int? // Tổng số token tiêu tốn (dùng để đo lường chi phí API)
+  role        String // Vai trò người gửi ("user" = câu hỏi học sinh, "assistant" = câu trả lời AI, "system" = prompt hệ thống)
+  message     String // Nội dung văn bản của câu hỏi hoặc câu trả lời AI
+  model_used  String? // Tên mô hình AI được sử dụng (VD: "gpt-4o", "gemini-1.5-pro")
+  tokens_used Int? // Tổng số token tiêu tốn (dùng để đo lường chi phí API)
 
   // 3. Timestamps
-  timestamp       DateTime @default(now()) @db.Timestamptz // Thời điểm phát sinh câu hỏi/câu trả lời
-  created_at      DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bản ghi
+  timestamp  DateTime @default(now()) @db.Timestamptz // Thời điểm phát sinh câu hỏi/câu trả lời
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bản ghi
 
   // Relations
   user   User    @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
@@ -922,8 +928,8 @@ enum QuizStatus {
 // ================================================================
 model Quiz {
   // 1. Primary Key & Foreign Keys
-  quiz_id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài quiz
-  course_id          String     @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa các bài quiz)
+  quiz_id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài quiz
+  course_id String @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa các bài quiz)
 
   // 2. Quiz Metadata & Rules
   title              String // Tiêu đề bài kiểm tra (VD: "Kiểm tra 15 phút - Đạo hàm & Tiệm cận")
@@ -934,11 +940,11 @@ model Quiz {
   status             QuizStatus @default(draft) // Trạng thái bài kiểm tra (draft -> published -> archived)
 
   // 3. AI Generation Config
-  generated_by_ai    Boolean    @default(false) // Cờ đánh dấu đề thi do AI tự động khởi tạo từ tài liệu học tập
-  ai_model_version   String? // Phiên bản mô hình AI sinh đề (VD: "gpt-4o", "gemini-1.5-flash")
+  generated_by_ai  Boolean @default(false) // Cờ đánh dấu đề thi do AI tự động khởi tạo từ tài liệu học tập
+  ai_model_version String? // Phiên bản mô hình AI sinh đề (VD: "gpt-4o", "gemini-1.5-flash")
 
   // 4. Timestamps
-  created_at         DateTime   @default(now()) @db.Timestamptz // Thời điểm tạo bài quiz
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bài quiz
 
   // Relations
   course    Course         @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
@@ -956,8 +962,8 @@ model Quiz {
 // ================================================================
 model QuizQuestion {
   // 1. Primary Key & Foreign Keys
-  question_id   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho câu hỏi
-  quiz_id       String           @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (Xóa bài quiz -> xóa các câu hỏi)
+  question_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho câu hỏi
+  quiz_id     String @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (Xóa bài quiz -> xóa các câu hỏi)
 
   // 2. Question Details
   question_text String // Nội dung văn bản câu hỏi
@@ -967,7 +973,7 @@ model QuizQuestion {
   order_index   Int              @default(0) // Thứ tự hiển thị của câu hỏi trong đề thi (0, 1, 2...)
 
   // 3. Timestamps
-  created_at    DateTime         @default(now()) @db.Timestamptz // Thời điểm tạo câu hỏi
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo câu hỏi
 
   // Relations
   quiz    Quiz         @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade)
@@ -984,16 +990,16 @@ model QuizQuestion {
 // ================================================================
 model QuizOption {
   // 1. Primary Key & Foreign Keys
-  option_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho lựa chọn đáp án
-  question_id String   @db.Uuid // Khóa ngoại liên kết tới quiz_questions.question_id (Xóa câu hỏi -> xóa các lựa chọn)
+  option_id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho lựa chọn đáp án
+  question_id String @db.Uuid // Khóa ngoại liên kết tới quiz_questions.question_id (Xóa câu hỏi -> xóa các lựa chọn)
 
   // 2. Option Details
   content     String // Nội dung phương án lựa chọn (VD: "Đáp án A: 12", "Hà Nội")
-  is_correct  Boolean  @default(false) // Đánh dấu đây có phải đáp án đúng hay không (true = đúng)
-  order_index Int      @default(0) // Thứ tự hiển thị của phương án trong câu hỏi (0, 1, 2...)
+  is_correct  Boolean @default(false) // Đánh dấu đây có phải đáp án đúng hay không (true = đúng)
+  order_index Int     @default(0) // Thứ tự hiển thị của phương án trong câu hỏi (0, 1, 2...)
 
   // 3. Timestamps
-  created_at  DateTime @default(now()) @db.Timestamptz // Thời điểm tạo phương án
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo phương án
 
   // Relations
   question QuizQuestion @relation(fields: [question_id], references: [question_id], onDelete: Cascade)
@@ -1009,21 +1015,21 @@ model QuizOption {
 // ================================================================
 model QuizAttempt {
   // 1. Primary Key & Foreign Keys
-  attempt_id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho lượt làm bài
-  student_id       String    @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (học sinh tham gia làm bài)
-  quiz_id          String    @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (bài quiz được thực hiện)
+  attempt_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho lượt làm bài
+  student_id String @db.Uuid // Khóa ngoại liên kết tới student_profiles.student_id (học sinh tham gia làm bài)
+  quiz_id    String @db.Uuid // Khóa ngoại liên kết tới quizzes.quiz_id (bài quiz được thực hiện)
 
   // 2. Score & Response Data
-  score            Decimal?  @db.Decimal(5, 2) // Điểm số học sinh đạt được (VD: 8.50)
+  score            Decimal? @db.Decimal(5, 2) // Điểm số học sinh đạt được (VD: 8.50)
   total_points     Int? // Tổng điểm tối đa của đề thi tại thời điểm làm bài
-  answers_json     Json?     @default("[]") // Mảng JSON lưu trữ danh sách các câu trả lời học sinh đã nộp
+  answers_json     Json?    @default("[]") // Mảng JSON lưu trữ danh sách các câu trả lời học sinh đã nộp
   duration_seconds Int? // Thời gian thực tế học sinh làm bài (tính bằng giây)
   is_passed        Boolean? // Cờ đánh dấu học sinh có Đạt hay không (score >= passing_score)
 
   // 3. Timestamps
-  started_at       DateTime  @default(now()) @db.Timestamptz // Thời điểm bắt đầu làm bài
-  completed_at     DateTime? @db.Timestamptz // Thời điểm học sinh hoàn thành và nộp bài
-  created_at       DateTime  @default(now()) @db.Timestamptz // Thời điểm lưu lượt làm bài
+  started_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm bắt đầu làm bài
+  completed_at DateTime? @db.Timestamptz // Thời điểm học sinh hoàn thành và nộp bài
+  created_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm lưu lượt làm bài
 
   // Relations
   student StudentProfile @relation(fields: [student_id], references: [student_id])
@@ -1045,9 +1051,9 @@ model QuizAttempt {
 // ================================================================
 model AdminLog {
   // 1. Primary Key & Foreign Keys
-  log_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi audit log
-  admin_id     String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (tài khoản Admin thực hiện thao tác)
-  target_id    String?  @db.Uuid // Mã ID định danh của đối tượng chịu tác động
+  log_id    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bản ghi audit log
+  admin_id  String  @db.Uuid // Khóa ngoại liên kết tới users.user_id (tài khoản Admin thực hiện thao tác)
+  target_id String? @db.Uuid // Mã ID định danh của đối tượng chịu tác động
 
   // 2. Log Action & Target Details
   action       String // Tên hành động quản trị (VD: "APPROVE_TUTOR", "SUSPEND_USER", "REFUND_BOOKING")
@@ -1056,7 +1062,7 @@ model AdminLog {
   ip_address   String? // Địa chỉ IP của Admin tại thời điểm gửi yêu cầu thao tác
 
   // 3. Timestamps
-  created_at   DateTime @default(now()) @db.Timestamptz // Thời điểm thực hiện hành động quản trị
+  created_at DateTime @default(now()) @db.Timestamptz // Thời điểm thực hiện hành động quản trị
 
   // Relations
   admin User @relation(fields: [admin_id], references: [user_id])
@@ -1073,14 +1079,14 @@ model AdminLog {
 // ================================================================
 model SystemConfig {
   // 1. Primary Key
-  config_key   String   @id // Khóa chính đại diện tên cấu hình (VD: "COMMISSION_RATE", "MAX_FILE_SIZE_MB", "MAINTENANCE_MODE")
+  config_key String @id // Khóa chính đại diện tên cấu hình (VD: "COMMISSION_RATE", "MAX_FILE_SIZE_MB", "MAINTENANCE_MODE")
 
   // 2. Value & Description
   config_value String? // Giá trị cấu hình tương ứng dưới dạng chuỗi (VD: "15.0", "50", "false")
   description  String? // Mô tả ý nghĩa và mục đích sử dụng của tham số cấu hình này
 
   // 3. Timestamps
-  updated_at   DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật giá trị cấu hình mới nhất
+  updated_at DateTime @default(now()) @db.Timestamptz // Thời điểm cập nhật giá trị cấu hình mới nhất
 
   @@map("system_configs")
 }
@@ -1095,17 +1101,17 @@ model SystemConfig {
 // ================================================================
 model ArticleCategory {
   // 1. Primary Key
-  category_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
   // 2. Category Details
-  name        String   @unique // Tên danh mục (VD: "Bí quyết ôn thi", "Tin tức giáo dục")
-  slug        String   @unique // Đường dẫn thân thiện SEO (VD: "bi-quyet-on-thi")
-  description String?  // Mô tả ngắn gọn về danh mục
-  order_index Int      @default(0) // Thứ tự hiển thị
-  is_active   Boolean  @default(true) // Trạng thái kích hoạt
+  name        String  @unique // Tên danh mục (VD: "Bí quyết ôn thi", "Tin tức giáo dục")
+  slug        String  @unique // Đường dẫn thân thiện SEO (VD: "bi-quyet-on-thi")
+  description String? // Mô tả ngắn gọn về danh mục
+  order_index Int     @default(0) // Thứ tự hiển thị
+  is_active   Boolean @default(true) // Trạng thái kích hoạt
 
   // 3. Timestamps
-  created_at  DateTime @default(now()) @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
 
   articles Article[]
 
@@ -1119,13 +1125,13 @@ model ArticleCategory {
 // ================================================================
 model Article {
   // 1. Primary Key & Foreign Keys
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài viết
-  author_id     String?   @db.Uuid // Khóa ngoại liên kết tới users.user_id (Gia sư/Admin đăng bài)
-  category_id   String?   @db.Uuid // Khóa ngoại liên kết tới article_categories.category_id
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bài viết
+  author_id   String? @db.Uuid // Khóa ngoại liên kết tới users.user_id (Gia sư/Admin đăng bài)
+  category_id String? @db.Uuid // Khóa ngoại liên kết tới article_categories.category_id
 
   // 2. Article Content Details
   title         String // Tiêu đề bài viết (VD: "Bí quyết đạt 8.0 IELTS trong 6 tháng")
-  slug          String?   @unique // Đường dẫn chuẩn SEO (VD: "bi-quyet-dat-8-0-ielts")
+  slug          String? @unique // Đường dẫn chuẩn SEO (VD: "bi-quyet-dat-8-0-ielts")
   excerpt       String // Đoạn trích dẫn ngắn / Tóm tắt nội dung bài viết
   content       Json // Nội dung chi tiết bài viết dưới dạng mảng JSON Rich Text Blocks
   thumbnail_url String? // Đường dẫn URL ảnh đại diện bài viết
@@ -1135,14 +1141,14 @@ model Article {
   category      String? // Giữ lại tên danh mục chuỗi cũ
 
   // 3. Counters & Flags
-  commentsCount Int       @default(0) // Tổng số lượng bình luận
-  view_count    Int       @default(0) // Số lượt người đọc bài viết
-  is_published  Boolean   @default(false) // Trạng thái xuất bản bài viết
+  commentsCount Int     @default(0) // Tổng số lượng bình luận
+  view_count    Int     @default(0) // Số lượt người đọc bài viết
+  is_published  Boolean @default(false) // Trạng thái xuất bản bài viết
 
   // 4. Timestamps
-  published_at  DateTime? @db.Timestamptz // Thời điểm xuất bản bài viết
-  created_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo bài viết
-  updated_at    DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật bài viết gần nhất
+  published_at DateTime? @db.Timestamptz // Thời điểm xuất bản bài viết
+  created_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm tạo bài viết
+  updated_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm cập nhật bài viết gần nhất
 
   // Relations
   author_user       User?            @relation(fields: [author_id], references: [user_id], onDelete: SetNull)
@@ -1162,13 +1168,13 @@ model Article {
 // ================================================================
 model ArticleComment {
   // 1. Primary Key & Foreign Keys
-  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bình luận bài viết
-  article_id String   @db.Uuid // Khóa ngoại liên kết tới articles.id (Xóa bài viết -> xóa các bình luận)
-  user_id    String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (người viết bình luận)
+  comment_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bình luận bài viết
+  article_id String @db.Uuid // Khóa ngoại liên kết tới articles.id (Xóa bài viết -> xóa các bình luận)
+  user_id    String @db.Uuid // Khóa ngoại liên kết tới users.user_id (người viết bình luận)
 
   // 2. Comment Content & Visibility
   content    String // Nội dung văn bản bình luận
-  is_visible Boolean  @default(true) // Trạng thái hiển thị (true = công khai, false = ẩn do vi phạm)
+  is_visible Boolean @default(true) // Trạng thái hiển thị (true = công khai, false = ẩn do vi phạm)
 
   // 3. Timestamps
   created_at DateTime @default(now()) @db.Timestamptz // Thời điểm gửi bình luận
@@ -1190,14 +1196,14 @@ model ArticleComment {
 // ================================================================
 model CourseComment {
   // 1. Primary Key & Foreign Keys
-  comment_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bình luận khóa học
-  course_id  String   @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa bình luận)
-  user_id    String   @db.Uuid // Khóa ngoại liên kết tới users.user_id (người đăng thắc mắc/bình luận)
+  comment_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Khóa chính UUID cho bình luận khóa học
+  course_id  String @db.Uuid // Khóa ngoại liên kết tới courses.course_id (Xóa khóa học -> xóa bình luận)
+  user_id    String @db.Uuid // Khóa ngoại liên kết tới users.user_id (người đăng thắc mắc/bình luận)
 
   // 2. Comment Content & Rating
   content    String // Nội dung văn bản thắc mắc hoặc thảo luận
-  rating     Int?     @db.SmallInt // Điểm số đánh giá tùy chọn (giữ lại hỗ trợ dữ liệu cũ)
-  is_visible Boolean  @default(true) // Trạng thái hiển thị (true = công khai, false = ẩn do vi phạm)
+  rating     Int?    @db.SmallInt // Điểm số đánh giá tùy chọn (giữ lại hỗ trợ dữ liệu cũ)
+  is_visible Boolean @default(true) // Trạng thái hiển thị (true = công khai, false = ẩn do vi phạm)
 
   // 3. Timestamps
   created_at DateTime @default(now()) @db.Timestamptz // Thời điểm tạo bình luận
@@ -1218,24 +1224,53 @@ model CourseComment {
 
 enum ClassRequestStatus {
   PENDING_ADMIN // Mới tạo, chờ Admin kiểm tra và duyệt mở lớp
-  WAITING_TUTOR_CONFIRM // Gia sư đã được chọn, đang chờ thanh toán phí nhận lớp
-  OPEN // Lớp chưa giao / Đang cần gia sư (Hiển thị danh sách công khai)
+  WAITING_PAYMENT // Gia sư đã được chọn (ClassApplication APPROVED), đang chờ Học viên đóng học phí VÀ Gia sư đóng phí nhận lớp (xem OfflineClassPayment). Khi cả 2 đã PAID -> hệ thống tạo OfflineClass và xóa record này
+  OPEN // Lớp chưa giao / Đang cần gia sư (Hiển thị danh sách công khai). Cũng là trạng thái được MỞ LẠI khi Gia sư trễ hạn thanh toán (lỗi thuộc về Gia sư -> hoàn tiền Học viên đã đóng nếu có, request vẫn còn giá trị nên quay lại OPEN cho Gia sư khác ứng tuyển)
   REJECTED // Admin từ chối yêu cầu
   CANCELLED // Học viên hủy yêu cầu
-  EXPIRED // Hết 48 giờ mà gia sư không thanh toán phí nhận lớp
+  EXPIRED // Học viên trễ hạn thanh toán (lỗi thuộc về Học viên) -> hoàn tiền Gia sư đã đóng nếu có, request đóng vĩnh viễn (không mở lại vì bên khởi tạo request đã không hoàn tất nghĩa vụ)
 }
 
 enum ClassApplicationStatus {
-  PENDING              // Đã gửi đơn ứng tuyển nhanh, chờ Admin duyệt
-  APPROVED             // Được Admin chọn và giao lớp
+  PENDING // Đã gửi đơn ứng tuyển nhanh, chờ Admin duyệt
+  APPROVED // Được Admin chọn và giao lớp
   APPROVED_WAITING_FEE // Được duyệt, đang chờ gia sư thanh toán phí (legacy)
-  REJECTED             // Bị từ chối
+  REJECTED // Bị Admin chủ động từ chối
+  EXPIRED // Đã được duyệt (APPROVED) nhưng Gia sư không thanh toán phí nhận lớp kịp hạn -> tự động bỏ lỡ lớp (khác REJECTED vì đây là do Gia sư không hành động, không phải Admin từ chối)
 }
 
 enum OfflineClassStatus {
-  ACTIVE    // Lớp đang dạy
-  COMPLETED // Lớp đã kết thúc
-  CANCELLED // Lớp bị hủy sau khi giao
+  ACTIVE // Lớp đang hoạt động (chỉ được tạo ra khi cả Học viên và Gia sư đã đóng tiền giữ chỗ đầy đủ - xem OfflineClassPayment)
+  CANCELLED // Lớp bị hủy do phát sinh sự cố trong 7 ngày đầu (xử lý qua RefundTicket)
+}
+
+// Loại khoản tiền giữ chỗ (escrow) bắt buộc phải đóng trước khi lớp được giao (tạo OfflineClass)
+enum EscrowPaymentType {
+  STUDENT_TUITION // Học phí tháng đầu tiên do Học viên đóng (100% class_salary)
+  TUTOR_PLACEMENT_FEE // Phí nhận lớp do Gia sư đóng (= class_salary * commission_rate%)
+}
+
+// Trạng thái của từng khoản tiền giữ chỗ (escrow) trong OfflineClassPayment
+enum EscrowPaymentStatus {
+  PENDING // Chưa đóng tiền (đang ở giai đoạn ClassRequest, chờ thanh toán)
+  PAID // Đã đóng đủ, tiền đang được hệ thống tạm giữ (escrow)
+  REFUNDED // Đã hoàn trả 100% tiền đã đóng (bên KHÔNG có lỗi khi hủy lớp trong 7 ngày, HOẶC khi bên còn lại trễ hạn thanh toán ở vòng WAITING_PAYMENT)
+  PARTIALLY_REFUNDED // Đã hoàn trả một phần sau khi trừ tiền phạt (90% hoặc 80% tùy trường hợp lỗi)
+  EXPIRED // Còn PENDING (chưa từng đóng tiền) nhưng ClassRequest đã quay vòng/đóng lại nên nghĩa vụ này hết hiệu lực - không có dòng tiền phát sinh, giữ lại chỉ để audit
+}
+
+// Bên bị xác định là có lỗi dẫn tới việc hủy lớp trong vòng 7 ngày đầu kể từ khi giao lớp
+enum RefundFaultType {
+  STUDENT_FAULT // Lỗi do Học viên (VD: tự ý hủy, cung cấp thông tin sai sự thật...)
+  TUTOR_FAULT // Lỗi do Gia sư (VD: không đến dạy, vi phạm cam kết...)
+}
+
+// Trạng thái xử lý của yêu cầu hủy/hoàn tiền (RefundTicket)
+enum RefundTicketStatus {
+  PENDING // Học viên hoặc Gia sư vừa gửi yêu cầu hủy, đang chờ Admin xử lý
+  APPROVED // Admin đã xác nhận bên có lỗi (fault_type) và chốt số tiền hoàn/phạt, chờ thực hiện chuyển tiền
+  REJECTED // Admin từ chối yêu cầu hủy (không đủ căn cứ)
+  COMPLETED // Đã hoàn tất chuyển tiền hoàn trả và ghi nhận tiền phạt, lớp chuyển sang CANCELLED
 }
 
 // ================================================================
@@ -1246,42 +1281,43 @@ enum OfflineClassStatus {
 // ================================================================
 model ClassRequest {
   // 1. Primary Key & Foreign Keys
-  request_id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_id          String?            @db.Uuid // FK tới student_profiles.student_id (nếu học viên đăng nhập)
-  grade_level         GradeLevel?        // Khối lớp học (Lớp 1 - 12)
-  subject_id          String?            @db.Uuid // FK tới subjects.subject_id
+  request_id  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id  String?     @db.Uuid // FK tới student_profiles.student_id (nếu học viên đăng nhập)
+  grade_level GradeLevel? // Khối lớp học (Lớp 1 - 12)
+  subject_id  String?     @db.Uuid // FK tới subjects.subject_id
 
   // 2. Code & Student Info
-  class_code          String?            @unique // Mã lớp học hiển thị (VD: MS: 89513)
-  student_name        String             // Họ tên học viên / phụ huynh
-  phone               String             // Số điện thoại liên hệ
-  email               String?            // Email liên hệ
-  address_detail      String             // Địa chỉ chi tiết (VD: tỉnh lộ 43 - Bình Chiểu)
-  district            String?            // Quận / Huyện (VD: Q.Thủ Đức)
-  province            String?            // Tỉnh / Thành phố (VD: Hồ Chí Minh)
+  class_code     String? @unique // Mã lớp học hiển thị (VD: MS: 89513)
+  student_name   String // Họ tên học viên / phụ huynh
+  phone          String // Số điện thoại liên hệ
+  email          String? // Email liên hệ
+  address_detail String // Địa chỉ chi tiết (VD: tỉnh lộ 43 - Bình Chiểu)
+  district       String? // Quận / Huyện (VD: Q.Thủ Đức)
+  province       String? // Tỉnh / Thành phố (VD: Hồ Chí Minh)
 
   // 3. Request Requirements & Pricing
-  num_students        Int                @default(1) // Số lượng học sinh
-  academic_level      String?            // Học lực hiện tại / Thông tin học sinh (VD: Nam, học giỏi)
-  sessions_per_week   Int                @default(2) // Số buổi (VD: 2 buổi/tuần)
-  study_time          String?            // Thời gian học (VD: Dạy 120 phút/buổi, các tối 18h-20h)
-  tutor_requirement   String?            // Yêu cầu gia sư (VD: Nữ Sinh Viên, Giáo Viên)
-  selected_tutor_code String?            // Mã số/tên gia sư học viên điền thủ công (VD: 7650, 2907)
-  class_salary        Decimal            @default(0) @db.Decimal(12, 2) // Tiền chi cho lớp học (VNĐ/tháng)
-  other_requirements  String?            // Yêu cầu khác
+  num_students        Int     @default(1) // Số lượng học sinh
+  academic_level      String? // Học lực hiện tại / Thông tin học sinh (VD: Nam, học giỏi)
+  sessions_per_week   Int     @default(2) // Số buổi (VD: 2 buổi/tuần)
+  study_time          String? // Thời gian học (VD: Dạy 120 phút/buổi, các tối 18h-20h)
+  tutor_requirement   String? // Yêu cầu gia sư (VD: Nữ Sinh Viên, Giáo Viên)
+  selected_tutor_code String? // Mã số/tên gia sư học viên điền thủ công (VD: 7650, 2907)
+  class_salary        Decimal @default(0) @db.Decimal(12, 2) // Tiền chi cho lớp học (VNĐ/tháng)
+  other_requirements  String? // Yêu cầu khác
 
   // 4. Status & Administrative Notes
-  status              ClassRequestStatus @default(PENDING_ADMIN)
-  admin_note          String?            // Lý do từ chối hoặc ghi chú quản trị của Admin
+  status     ClassRequestStatus @default(PENDING_ADMIN)
+  admin_note String? // Lý do từ chối hoặc ghi chú quản trị của Admin
 
   // 5. Timestamps
-  created_at          DateTime           @default(now()) @db.Timestamptz
-  updated_at          DateTime           @default(now()) @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
 
   // Relations
-  student      StudentProfile?    @relation(fields: [student_id], references: [student_id], onDelete: SetNull)
-  subject      Subject?           @relation(fields: [subject_id], references: [subject_id], onDelete: SetNull)
+  student      StudentProfile?       @relation(fields: [student_id], references: [student_id], onDelete: SetNull)
+  subject      Subject?              @relation(fields: [subject_id], references: [subject_id], onDelete: SetNull)
   applications ClassApplication[]
+  payments     OfflineClassPayment[] // Các khoản tiền giữ chỗ (học phí học viên / phí nhận lớp gia sư) đang chờ thanh toán ở giai đoạn "giỏ hàng" này
 
   @@index([status, created_at(sort: Desc)], map: "idx_class_requests_status")
   @@index([province, district], map: "idx_class_requests_location")
@@ -1296,42 +1332,45 @@ model ClassRequest {
 // ================================================================
 model OfflineClass {
   // 1. Primary Key & Foreign Keys
-  class_id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tutor_id           String             @db.Uuid // FK → tutor_profiles.tutor_id (gia sư nhận lớp)
-  student_id         String?            @db.Uuid // FK → student_profiles.student_id (nếu học viên đăng nhập)
+  class_id   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tutor_id   String  @db.Uuid // FK → tutor_profiles.tutor_id (gia sư nhận lớp)
+  student_id String? @db.Uuid // FK → student_profiles.student_id (nếu học viên đăng nhập)
 
   // 2. Snapshot thông tin lớp học (copy từ ClassRequest tại thời điểm giao)
-  class_offline_code String?            // Mã lớp gốc (copy từ ClassRequest.class_code)
-  student_name      String             // Họ tên học viên / phụ huynh
-  phone             String             // Số điện thoại liên hệ
-  email             String?            // Email liên hệ
-  address_detail    String             // Địa chỉ chi tiết
-  district          String?            // Quận / Huyện
-  province          String?            // Tỉnh / Thành phố
-  grade_level       GradeLevel?        // Khối lớp (Lớp 1 - 12)
-  num_students      Int                @default(1) // Số lượng học sinh
-  academic_level    String?            // Học lực học sinh
-  sessions_per_week Int                @default(2) // Số buổi / tuần
-  study_time        String?            // Thời gian học
+  class_offline_code String? // Mã lớp gốc (copy từ ClassRequest.class_code)
+  student_name       String // Họ tên học viên / phụ huynh
+  phone              String // Số điện thoại liên hệ
+  email              String? // Email liên hệ
+  address_detail     String // Địa chỉ chi tiết
+  district           String? // Quận / Huyện
+  province           String? // Tỉnh / Thành phố
+  grade_level        GradeLevel? // Khối lớp (Lớp 1 - 12)
+  num_students       Int         @default(1) // Số lượng học sinh
+  academic_level     String? // Học lực học sinh
+  sessions_per_week  Int         @default(2) // Số buổi / tuần
+  study_time         String? // Thời gian học
 
   // 3. Thông tin tài chính khi giao lớp
-  class_salary      Decimal            @db.Decimal(12, 2) // Tiền chi cho lớp học (VNĐ/tháng)
-  commission_rate   Decimal            @default(35) @db.Decimal(5, 2) // Phí nhận lớp (%)
-  fee_amount        Decimal?           @db.Decimal(12, 2) // Tiền phí đã thu từ gia sư
-  paid_at           DateTime?          @db.Timestamptz // Thời điểm gia sư thanh toán
+  // (Không còn fee_amount/paid_at riêng lẻ - toàn bộ lịch sử đóng tiền của cả Học viên lẫn Gia sư
+  //  được chuyển sang lưu ở bảng OfflineClassPayment để hỗ trợ audit và tính hoàn tiền/phạt)
+  class_salary    Decimal @db.Decimal(12, 2) // Tiền chi cho lớp học (VNĐ/tháng) - cũng là cơ sở tính học phí escrow (STUDENT_TUITION)
+  commission_rate Decimal @default(35) @db.Decimal(5, 2) // Phí nhận lớp (%) - cũng là cơ sở tính phí escrow của gia sư (TUTOR_PLACEMENT_FEE)
 
   // 4. Trạng thái & Ghi chú
-  status            OfflineClassStatus @default(ACTIVE)
-  admin_note        String?            // Ghi chú quản trị của Admin
+  status     OfflineClassStatus @default(ACTIVE) // Record chỉ được tạo ra khi cả 2 bên đã đóng tiền giữ chỗ xong nên mặc định luôn là ACTIVE
+  admin_note String? // Ghi chú quản trị của Admin
 
   // 5. Timestamps
-  assigned_at       DateTime           @default(now()) @db.Timestamptz // Thời điểm giao lớp
-  created_at        DateTime           @default(now()) @db.Timestamptz
-  updated_at        DateTime           @default(now()) @db.Timestamptz
+  assigned_at     DateTime @default(now()) @db.Timestamptz // Thời điểm giao lớp = thời điểm cả 2 bên đã thanh toán xong (đồng thời là mốc bắt đầu tính hạn hoàn tiền 7 ngày)
+  refund_deadline DateTime @default(dbgenerated("(now() + interval '7 days')")) @db.Timestamptz // Hạn chót được quyền gửi yêu cầu hủy/hoàn tiền = assigned_at + 7 ngày, lưu sẵn để truy vấn nhanh các lớp còn trong hạn hoàn tiền
+  created_at      DateTime @default(now()) @db.Timestamptz
+  updated_at      DateTime @default(now()) @db.Timestamptz
 
   // Relations
-  tutor   TutorProfile    @relation(fields: [tutor_id], references: [tutor_id])
-  student StudentProfile? @relation(fields: [student_id], references: [student_id])
+  tutor          TutorProfile          @relation(fields: [tutor_id], references: [tutor_id])
+  student        StudentProfile?       @relation(fields: [student_id], references: [student_id])
+  payments       OfflineClassPayment[] // Lịch sử 2 khoản tiền giữ chỗ (học phí học viên + phí nhận lớp gia sư) đã đóng cho lớp này
+  refund_tickets RefundTicket[] // Các yêu cầu hủy/hoàn tiền phát sinh trong 7 ngày đầu của lớp này
 
   @@index([tutor_id, status], map: "idx_offline_classes_tutor")
   @@index([status, assigned_at(sort: Desc)], map: "idx_offline_classes_status")
@@ -1345,19 +1384,19 @@ model OfflineClass {
 // ================================================================
 model ClassApplication {
   // 1. Primary Key & Foreign Keys
-  application_id   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  class_request_id String                 @db.Uuid
-  tutor_id         String?                @db.Uuid // FK tùy chọn tới tutor_profiles.tutor_id
+  application_id   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  class_request_id String  @db.Uuid
+  tutor_id         String? @db.Uuid // FK tùy chọn tới tutor_profiles.tutor_id
 
   // 2. Application Details & Status
-  applicant_phone  String // Số điện thoại người đăng ký nhận lớp
-  notes            String? // Yêu cầu thêm / Ghi chú
-  status           ClassApplicationStatus @default(PENDING)
+  applicant_phone String // Số điện thoại người đăng ký nhận lớp
+  notes           String? // Yêu cầu thêm / Ghi chú
+  status          ClassApplicationStatus @default(PENDING)
 
   // 3. Timestamps
-  available_from   DateTime?              @db.Date // Ngày có thể bắt đầu nhận lớp sớm nhất
-  created_at       DateTime               @default(now()) @db.Timestamptz
-  updated_at       DateTime               @default(now()) @db.Timestamptz
+  available_from DateTime? @db.Date // Ngày có thể bắt đầu nhận lớp sớm nhất
+  created_at     DateTime  @default(now()) @db.Timestamptz
+  updated_at     DateTime  @default(now()) @db.Timestamptz
 
   // Relations
   class_request ClassRequest  @relation(fields: [class_request_id], references: [request_id], onDelete: Cascade)
@@ -1369,13 +1408,115 @@ model ClassApplication {
 }
 
 // ================================================================
+// BẢNG: offline_class_payments
+// Mô tả: Sổ cái (ledger) từng khoản tiền giữ chỗ (escrow) bắt buộc của Học viên (học phí tháng đầu)
+//        và Gia sư (phí nhận lớp). Một ClassRequest có thể có NHIỀU dòng cùng loại theo thời gian nếu
+//        quay vòng qua nhiều lượt WAITING_PAYMENT (VD: gia sư A trễ hạn -> dòng TUTOR_PLACEMENT_FEE của
+//        A chuyển EXPIRED, request mở lại OPEN, gia sư B ứng tuyển -> tạo dòng TUTOR_PLACEMENT_FEE mới).
+// Luồng: Tạo ra ngay khi ClassApplication được APPROVED (class_request_id được gán, class_id còn NULL,
+//        status = PENDING) -> mỗi bên thanh toán -> status = PAID.
+//        - Nếu CẢ HAI đều PAID: hệ thống tạo OfflineClass, gán class_id cho 2 dòng vừa PAID rồi mới XÓA
+//          ClassRequest (class_request_id tự động về NULL nhờ onDelete: SetNull, không mất lịch sử).
+//        - Nếu MỘT bên trễ hạn thanh toán: dòng PENDING của bên trễ hạn -> EXPIRED (không có tiền phát
+//          sinh); dòng PAID của bên còn lại (nếu có) -> REFUNDED (hệ thống hoàn lại); ClassRequest quay
+//          về OPEN (nếu lỗi thuộc Gia sư) hoặc đóng hẳn EXPIRED (nếu lỗi thuộc Học viên).
+//        Nếu về sau lớp đã ACTIVE bị hủy trong 7 ngày (RefundTicket), 2 dòng đã gán class_id được cập
+//        nhật tiếp sang REFUNDED/PARTIALLY_REFUNDED để phản ánh số tiền hoàn/phạt cuối cùng.
+// ================================================================
+model OfflineClassPayment {
+  // 1. Primary Key & Foreign Keys
+  payment_id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  class_request_id String? @db.Uuid // FK -> class_requests.request_id: chỉ có giá trị khi lớp còn ở giai đoạn "giỏ hàng", tự động NULL khi ClassRequest bị xóa lúc chuyển đổi
+  class_id         String? @db.Uuid // FK -> offline_classes.class_id: chỉ được gán giá trị sau khi CẢ HAI bên đã thanh toán xong và lớp được giao (tạo OfflineClass)
+  payer_user_id    String  @db.Uuid // FK -> users.user_id: người có nghĩa vụ đóng khoản tiền này (tài khoản Học viên hoặc Gia sư)
+  transaction_id   String? @unique @db.Uuid // FK -> transactions.transaction_id: giao dịch thanh toán gốc đã thành công (tái sử dụng cổng thanh toán ZaloPay/Wallet có sẵn)
+
+  // 2. Loại tiền, Trạng thái & Số tiền
+  type            EscrowPaymentType // STUDENT_TUITION (học viên) hoặc TUTOR_PLACEMENT_FEE (gia sư)
+  status          EscrowPaymentStatus @default(PENDING) // PENDING -> PAID -> REFUNDED / PARTIALLY_REFUNDED
+  required_amount Decimal             @db.Decimal(12, 2) // Số tiền bắt buộc phải đóng, snapshot tại thời điểm tạo (= class_salary hoặc class_salary * commission_rate%)
+  paid_amount     Decimal?            @db.Decimal(12, 2) // Số tiền thực tế đã đóng (đối soát với required_amount)
+  penalty_amount  Decimal?            @default(0) @db.Decimal(12, 2) // Số tiền bị phạt giữ lại khi hủy lớp do lỗi của chính bên này (0 nếu không có lỗi)
+  refunded_amount Decimal?            @db.Decimal(12, 2) // Số tiền thực tế đã hoàn trả lại cho người đóng (= paid_amount - penalty_amount)
+
+  // 3. Timestamps
+  paid_at     DateTime? @db.Timestamptz // Thời điểm thanh toán thành công
+  refunded_at DateTime? @db.Timestamptz // Thời điểm hoàn tiền được xử lý xong
+  created_at  DateTime  @default(now()) @db.Timestamptz
+  updated_at  DateTime  @default(now()) @db.Timestamptz
+
+  // Relations
+  class_request ClassRequest? @relation(fields: [class_request_id], references: [request_id], onDelete: SetNull)
+  offline_class OfflineClass? @relation(fields: [class_id], references: [class_id], onDelete: Cascade)
+  payer         User          @relation(fields: [payer_user_id], references: [user_id])
+  transaction   Transaction?  @relation(fields: [transaction_id], references: [transaction_id], onDelete: SetNull)
+
+  // Lưu ý: KHÔNG đặt unique([class_request_id, type]) vì 1 ClassRequest có thể quay vòng qua nhiều lượt
+  // WAITING_PAYMENT (mỗi lượt gia sư trễ hạn sẽ tạo ra 1 dòng TUTOR_PLACEMENT_FEE mới cho gia sư kế tiếp,
+  // các dòng cũ giữ nguyên với status EXPIRED/REFUNDED để audit) -> chỉ đánh index thường để tra cứu.
+  @@unique([class_id, type], map: "uq_offline_class_payments_class_type") // Mỗi OfflineClass (đã giao lớp) chỉ có đúng 1 dòng học phí + 1 dòng phí nhận lớp
+  @@index([class_request_id, type], map: "idx_offline_class_payments_request_type")
+  @@index([status], map: "idx_offline_class_payments_status")
+  @@index([payer_user_id], map: "idx_offline_class_payments_payer")
+  @@map("offline_class_payments")
+}
+
+// ================================================================
+// BẢNG: refund_tickets
+// Mô tả: Yêu cầu hủy lớp & hoàn tiền, chỉ áp dụng trong vòng 7 ngày kể từ OfflineClass.assigned_at
+//        (đối chiếu với OfflineClass.refund_deadline khi xử lý ở tầng application).
+// Luồng: Học viên/Gia sư tạo ticket (PENDING) -> Admin xác định fault_type và tính toán số tiền
+//        hoàn/phạt theo đúng quy tắc kinh doanh (10%/90% nếu lỗi Học viên, 20%/80% nếu lỗi Gia sư)
+//        -> APPROVED hoặc REJECTED -> nếu APPROVED thì thực hiện chuyển tiền xong -> COMPLETED,
+//        đồng thời đồng bộ ngược trạng thái 2 dòng OfflineClassPayment và chuyển OfflineClass sang CANCELLED.
+// ================================================================
+model RefundTicket {
+  // 1. Primary Key & Foreign Keys
+  ticket_id    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  class_id     String  @db.Uuid // FK -> offline_classes.class_id
+  requested_by String  @db.Uuid // FK -> users.user_id: người gửi yêu cầu hủy (tài khoản Học viên hoặc Gia sư)
+  processed_by String? @db.Uuid // FK -> users.user_id: Admin đã duyệt/từ chối yêu cầu này
+
+  // 2. Nội dung yêu cầu & Kết luận xử lý
+  reason     String // Lý do hủy do người gửi yêu cầu tường trình
+  fault_type RefundFaultType? // Bên bị xác định có lỗi - Admin điền khi xử lý (NULL khi còn PENDING)
+  admin_note String? // Ghi chú / căn cứ kết luận của Admin
+  status     RefundTicketStatus @default(PENDING)
+
+  // 3. Số tiền phía Học viên (snapshot tại thời điểm xử lý, tính từ OfflineClassPayment loại STUDENT_TUITION)
+  student_tuition_amount Decimal @db.Decimal(12, 2) // Số tiền học phí tháng đầu học viên đã đóng
+  student_penalty_amount Decimal @default(0) @db.Decimal(12, 2) // Số tiền học viên bị phạt giữ lại (10% nếu STUDENT_FAULT, ngược lại 0)
+  student_refund_amount  Decimal @default(0) @db.Decimal(12, 2) // Số tiền hệ thống hoàn lại cho học viên (90% nếu STUDENT_FAULT, 100% nếu TUTOR_FAULT)
+
+  // 4. Số tiền phía Gia sư (snapshot tại thời điểm xử lý, tính từ OfflineClassPayment loại TUTOR_PLACEMENT_FEE)
+  tutor_fee_amount     Decimal @db.Decimal(12, 2) // Số tiền phí nhận lớp gia sư đã đóng
+  tutor_penalty_amount Decimal @default(0) @db.Decimal(12, 2) // Số tiền gia sư bị phạt giữ lại (20% nếu TUTOR_FAULT, ngược lại 0)
+  tutor_refund_amount  Decimal @default(0) @db.Decimal(12, 2) // Số tiền hệ thống hoàn lại cho gia sư (80% nếu TUTOR_FAULT, 100% nếu STUDENT_FAULT)
+
+  // 5. Timestamps
+  requested_at DateTime  @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu hủy (phải <= OfflineClass.refund_deadline mới hợp lệ)
+  processed_at DateTime? @db.Timestamptz // Thời điểm Admin xử lý xong (APPROVED/REJECTED)
+  created_at   DateTime  @default(now()) @db.Timestamptz
+  updated_at   DateTime  @default(now()) @db.Timestamptz
+
+  // Relations
+  offline_class   OfflineClass @relation(fields: [class_id], references: [class_id], onDelete: Cascade)
+  requester       User         @relation("RefundTicketRequester", fields: [requested_by], references: [user_id])
+  processed_admin User?        @relation("RefundTicketProcessor", fields: [processed_by], references: [user_id], onDelete: SetNull)
+
+  @@index([class_id], map: "idx_refund_tickets_class")
+  @@index([status, requested_at(sort: Desc)], map: "idx_refund_tickets_status")
+  @@map("refund_tickets")
+}
+
+// ================================================================
 // BẢNG: reference_prices
 // Mô tả: Bảng giá tham khảo lương gia sư theo khối lớp và số buổi/tuần.
 //        Dùng min/max Decimal thay vì String "600 - 700" để so sánh/filter chính xác.
 // ================================================================
 model ReferencePrice {
   // 1. Primary Key
-  price_id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  price_id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
   // 2. Reference Pricing Parameters
   grade_group         String // LỚP 1, 2, 3, 4 | LỚP 5, 6, 7, 8 | LỚP 9, 10, 11, 12 | LTDH - NGOẠI NGỮ
@@ -1384,8 +1525,8 @@ model ReferencePrice {
   teacher_tutor_price String // e.g. "1100 - 1300" (k/tháng)
 
   // 3. Timestamps
-  created_at          DateTime @default(now()) @db.Timestamptz
-  updated_at          DateTime @default(now()) @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
 
   @@map("reference_prices")
 }

@@ -14,6 +14,7 @@ tutorRoutes.patch('/bookings/:id', auth_middleware_1.verifyAuth, (0, auth_middle
 tutorRoutes.get('/class-sessions', auth_middleware_1.verifyAuth, (0, auth_middleware_1.requireRole)('tutor'), tutor_controller_1.tutorController.getClassSessions);
 tutorRoutes.get('/reviews', auth_middleware_1.verifyAuth, (0, auth_middleware_1.requireRole)('tutor'), tutor_controller_1.tutorController.getReviews);
 tutorRoutes.get('/wallet', auth_middleware_1.verifyAuth, (0, auth_middleware_1.requireRole)('tutor'), tutor_controller_1.tutorController.getWallet);
+tutorRoutes.post('/wallet/deposit', auth_middleware_1.verifyAuth, (0, auth_middleware_1.requireRole)('tutor'), tutor_controller_1.tutorController.depositToWallet);
 tutorRoutes.post('/wallet/withdraw', auth_middleware_1.verifyAuth, (0, auth_middleware_1.requireRole)('tutor'), tutor_controller_1.tutorController.withdrawFunds);
 tutorRoutes.get('/', tutor_controller_1.tutorController.getAll);
 tutorRoutes.get('/:tutorId', tutor_controller_1.tutorController.getById);
