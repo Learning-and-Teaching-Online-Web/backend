@@ -1,5 +1,20 @@
 import { prisma } from '../config/prisma';
 import { supabaseAdmin } from '../config/supabase';
+import { GradeLevel } from '@prisma/client';
+
+function mapGradeIdsToEnums(ids: any[]): GradeLevel[] {
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id: any) => {
+    const str = String(id).trim();
+    if (Object.values(GradeLevel).includes(str as GradeLevel)) return str as GradeLevel;
+    const match = str.match(/(\d+)/);
+    if (match) {
+      const key = `grade_${match[1]}` as keyof typeof GradeLevel;
+      if (key in GradeLevel) return GradeLevel[key];
+    }
+    return null;
+  }).filter(Boolean) as GradeLevel[];
+}
 
 function formatTutorUser(tutor: any) {
   if (!tutor) return tutor;
@@ -39,11 +54,6 @@ export const tutorRepository = {
         certificates: {
           orderBy: { created_at: 'desc' }
         },
-        grades: {
-          include: {
-            grade: true
-          }
-        },
         courses: {
           where: { status: 'published' },
           select: {
@@ -72,11 +82,11 @@ export const tutorRepository = {
 
     // Lấy danh sách các lớp offline (ClassRequest) từ database mà gia sư được giao, được học viên chọn, hoặc đã ứng tuyển
     try {
+      const tutorCode = (result as any).tutor_code;
       const offlineClasses = await prisma.classRequest.findMany({
         where: {
           OR: [
-            { assigned_tutor_id: tutorId },
-            { selected_tutor_id: tutorId },
+            ...(tutorCode ? [{ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' as const } }] : []),
             { applications: { some: { tutor_id: tutorId } } }
           ]
         },
@@ -85,11 +95,6 @@ export const tutorRepository = {
             select: {
               full_name: true,
               avatar_url: true
-            }
-          },
-          grade: {
-            select: {
-              name: true
             }
           }
         },
@@ -391,11 +396,6 @@ export const tutorRepository = {
       certificates: {
         orderBy: { created_at: 'desc' as const }
       },
-      grades: {
-        include: {
-          grade: true
-        }
-      },
       available_times: true,
       user: {
         select: {
@@ -490,21 +490,10 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
-    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
+    // Xử lý lưu các khối lớp nhận dạy vào mảng grade_levels (GradeLevel[])
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
     if (gradeIds !== undefined && Array.isArray(gradeIds)) {
-      await prisma.tutorGrade.deleteMany({
-        where: { tutor_id: tutor.tutor_id }
-      });
-
-      if (gradeIds.length > 0) {
-        await prisma.tutorGrade.createMany({
-          data: gradeIds.map((gId: string) => ({
-            tutor_id: tutor.tutor_id,
-            grade_id: gId
-          }))
-        });
-      }
+      updatePayload.grade_levels = mapGradeIdsToEnums(gradeIds);
     }
 
     // Xử lý lưu các khung giờ rảnh dạy vào bảng tutor_available_times
@@ -531,11 +520,6 @@ export const tutorRepository = {
       include: {
         certificates: {
           orderBy: { created_at: 'desc' }
-        },
-        grades: {
-          include: {
-            grade: true
-          }
         },
         available_times: true,
         user: {

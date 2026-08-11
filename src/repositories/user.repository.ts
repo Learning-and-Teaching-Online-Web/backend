@@ -1,5 +1,17 @@
 import { prisma } from '../config/prisma';
-import { AdminPosition } from '@prisma/client';
+import { AdminPosition, GradeLevel } from '@prisma/client';
+
+function mapToGradeLevel(val: any): GradeLevel | null {
+  if (!val) return null;
+  const str = String(val).trim();
+  if (Object.values(GradeLevel).includes(str as GradeLevel)) return str as GradeLevel;
+  const match = str.match(/(\d+)/);
+  if (match) {
+    const key = `grade_${match[1]}` as keyof typeof GradeLevel;
+    if (key in GradeLevel) return GradeLevel[key];
+  }
+  return null;
+}
 
 export const userRepository = {
   // Tìm kiếm thông tin user theo Email
@@ -129,9 +141,7 @@ export const userRepository = {
       where: { user_id: userId },
       include: {
         admin_profile: true,
-        student_profile: {
-          include: { grade: true }
-        },
+        student_profile: true,
         tutor_profile: true
       }
     });
@@ -154,7 +164,7 @@ export const userRepository = {
         address_detail: user.student_profile.address_detail,
         province: user.student_profile.province,
         district: user.student_profile.district,
-        grade_level: user.student_profile.grade?.name || null,
+        grade_level: user.student_profile.grade_level || null,
         academic_level: user.student_profile.academic_level,
       } : undefined
     };
@@ -186,11 +196,9 @@ export const userRepository = {
         if (metadata.academic_level !== undefined) profileUpdate.academic_level = metadata.academic_level;
 
         if (metadata.grade_level) {
-          const matchedGrade = await (prisma.grade as any).findUnique({
-            where: { name: metadata.grade_level }
-          });
-          if (matchedGrade) {
-            profileUpdate.grade_id = matchedGrade.grade_id;
+          const gEnum = mapToGradeLevel(metadata.grade_level);
+          if (gEnum) {
+            profileUpdate.grade_level = gEnum;
           }
         }
       }
