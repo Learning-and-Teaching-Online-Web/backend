@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { adminController } from '../controllers/admin.controller';
 import { classRequestController } from '../controllers/classRequest.controller';
+import { refundTicketController } from '../controllers/refundTicket.controller';
 import { verifyAuth, requireRole } from '../middlewares/auth.middleware';
 
 
@@ -39,5 +40,10 @@ adminRoutes.patch('/class-requests/:id/approve-open', classRequestController.adm
 adminRoutes.patch('/class-requests/:id/assign-tutor', classRequestController.adminAssignTutor);
 adminRoutes.put('/class-requests/:id', classRequestController.adminUpdateClassRequest);
 
+// 7. Refund Tickets management
+adminRoutes.get('/refund-tickets', refundTicketController.getTickets);
+adminRoutes.patch('/refund-tickets/:ticketId/process', refundTicketController.adminProcessTicket);
+
 export default adminRoutes;
+
 

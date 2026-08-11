@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { classRequestController } from '../controllers/classRequest.controller';
+import { refundTicketController } from '../controllers/refundTicket.controller';
 import { verifyAuth, optionalAuth } from '../middlewares/auth.middleware';
 
 const classRequestRoutes = Router();
@@ -8,8 +9,13 @@ const classRequestRoutes = Router();
 classRequestRoutes.get('/my-requests', verifyAuth, classRequestController.getMyRequests);
 classRequestRoutes.patch('/my-requests/:id', verifyAuth, classRequestController.updateMyRequest);
 classRequestRoutes.get('/tutor-classes', verifyAuth, classRequestController.getTutorClasses);
-classRequestRoutes.patch('/tutor-respond/:id', verifyAuth, classRequestController.respondTutorClass);
 classRequestRoutes.post('/:id/pay-commission', verifyAuth, classRequestController.payCommission);
+classRequestRoutes.post('/:id/pay-tuition', verifyAuth, classRequestController.payStudentTuition);
+classRequestRoutes.post('/:id/check-expiration', verifyAuth, classRequestController.handleEscrowExpiration);
+
+classRequestRoutes.get('/refund-tickets/my-tickets', verifyAuth, refundTicketController.getTickets);
+classRequestRoutes.post('/offline-classes/:classId/refund-tickets', verifyAuth, refundTicketController.createTicket);
+
 classRequestRoutes.post('/', verifyAuth, classRequestController.create);
 classRequestRoutes.post('/:id/apply', verifyAuth, classRequestController.apply);
 
@@ -18,3 +24,4 @@ classRequestRoutes.get('/open', classRequestController.getOpenClasses);
 classRequestRoutes.get('/:id', optionalAuth, classRequestController.getDetail);
 
 export default classRequestRoutes;
+

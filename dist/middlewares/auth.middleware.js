@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireApprovedTutor = exports.requireRole = exports.verifyAuth = void 0;
+exports.requireApprovedTutor = exports.requireRole = exports.optionalAuth = exports.verifyAuth = void 0;
 const prisma_1 = require("../config/prisma");
 const jwt_util_1 = require("../utils/jwt.util");
 const verifyAuth = async (req, res, next) => {
@@ -46,6 +46,40 @@ const verifyAuth = async (req, res, next) => {
     }
 };
 exports.verifyAuth = verifyAuth;
+const optionalAuth = async (req, _res, next) => {
+    try {
+        const authReq = req;
+        const authHeader = authReq.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            if (token) {
+                try {
+                    const decoded = jwt_util_1.jwtUtil.verifyAccessToken(token);
+                    authReq.user = {
+                        id: decoded.userId,
+                        userId: decoded.userId,
+                        user_id: decoded.userId,
+                        email: decoded.email,
+                        role: decoded.role,
+                        user_metadata: {
+                            role: decoded.role,
+                            full_name: decoded.full_name || (decoded.email ? decoded.email.split('@')[0] : '')
+                        }
+                    };
+                    authReq.token = token;
+                }
+                catch {
+                    // Token invalid/expired, continue without user
+                }
+            }
+        }
+        next();
+    }
+    catch {
+        next();
+    }
+};
+exports.optionalAuth = optionalAuth;
 const requireRole = (...roles) => {
     return (req, res, next) => {
         const authReq = req;

@@ -1,9 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.findAll = findAll;
-const supabase_1 = require("../config/supabase");
+const prisma_1 = require("../config/prisma");
 async function findAll() {
-    return await supabase_1.supabase
-        .from("subjects")
-        .select("*");
+    try {
+        const data = await prisma_1.prisma.subject.findMany({
+            where: { is_active: true },
+            orderBy: { name: "asc" }
+        });
+        return { data, error: null };
+    }
+    catch (error) {
+        return { data: null, error };
+    }
 }

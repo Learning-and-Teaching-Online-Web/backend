@@ -6,9 +6,14 @@ exports.favoriteController = {
     async toggleFavorite(req, res) {
         try {
             const userId = req.user?.id;
+            const userRole = req.user?.role || req.user?.user_metadata?.role;
             const { tutorId } = req.body;
             if (!userId) {
                 res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+                return;
+            }
+            if (userRole !== 'student') {
+                res.status(403).json({ success: false, error: 'Chỉ tài khoản Học viên mới có quyền sử dụng tính năng Gia sư yêu thích.' });
                 return;
             }
             if (!tutorId) {
@@ -37,8 +42,13 @@ exports.favoriteController = {
     async listMyFavorites(req, res) {
         try {
             const userId = req.user?.id;
+            const userRole = req.user?.role || req.user?.user_metadata?.role;
             if (!userId) {
                 res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+                return;
+            }
+            if (userRole !== 'student') {
+                res.status(200).json({ success: true, data: [] });
                 return;
             }
             const student = await favorite_repository_1.favoriteRepository.findStudentProfileByUserId(userId);

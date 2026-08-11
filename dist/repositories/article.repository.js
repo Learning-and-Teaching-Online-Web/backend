@@ -5,12 +5,18 @@ const prisma_1 = require("../config/prisma");
 exports.articleRepository = {
     async findAll() {
         return await prisma_1.prisma.article.findMany({
-            orderBy: { created_at: 'desc' }
+            orderBy: { created_at: 'desc' },
+            include: {
+                category_relation: true
+            }
         });
     },
     async findById(id) {
         return await prisma_1.prisma.article.findUnique({
-            where: { id }
+            where: { id },
+            include: {
+                category_relation: true
+            }
         });
     },
     async create(data) {
@@ -18,13 +24,19 @@ exports.articleRepository = {
             data: {
                 ...data,
                 published_at: data.published_at ? new Date(data.published_at) : new Date()
+            },
+            include: {
+                category_relation: true
             }
         });
     },
     async update(id, data) {
         return await prisma_1.prisma.article.update({
             where: { id },
-            data
+            data,
+            include: {
+                category_relation: true
+            }
         });
     },
     async delete(id) {

@@ -183,6 +183,55 @@ exports.tutorController = {
             res.status(400).json({ success: false, error: error.message || error });
         }
     },
+    // Nạp tiền thủ công vào ví (Mock deposit — dùng cho dev/demo)
+    async depositToWallet(req, res) {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                res.status(401).json({ success: false, error: 'Xác thực tài khoản thất bại' });
+                return;
+            }
+            const { amount } = req.body;
+            const numericAmount = Number(amount);
+            if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
+                res.status(400).json({ success: false, error: 'Số tiền nạp phải lớn hơn 0' });
+                return;
+            }
+            if (numericAmount > 100_000_000) {
+                res.status(400).json({ success: false, error: 'Số tiền nạp tối đa là 100,000,000 VNĐ mỗi lần' });
+                return;
+            }
+            // Upsert wallet
+            const wallet = await prisma_1.prisma.wallet.upsert({
+                where: { user_id: userId },
+                create: { user_id: userId, balance: numericAmount, currency: 'VND' },
+                update: { balance: { increment: numericAmount }, updated_at: new Date() },
+            });
+            // Tạo transaction record để theo dõi
+            await prisma_1.prisma.transaction.create({
+                data: {
+                    user_id: userId,
+                    amount: numericAmount,
+                    payment_method: 'mock',
+                    description: `Nạp tiền thủ công vào ví`,
+                    status: 'success',
+                    paid_at: new Date(),
+                },
+            });
+            res.status(200).json({
+                success: true,
+                message: `Nạp ${numericAmount.toLocaleString('vi-VN')} VNĐ vào ví thành công!`,
+                data: {
+                    new_balance: Number(wallet.balance),
+                    amount_deposited: numericAmount,
+                },
+            });
+        }
+        catch (error) {
+            console.error('Error in depositToWallet controller:', error);
+            res.status(500).json({ success: false, error: error.message || 'Lỗi khi nạp tiền vào ví' });
+        }
+    },
     // Get logged-in tutor profile + certificates
     async getMyProfile(req, res) {
         try {

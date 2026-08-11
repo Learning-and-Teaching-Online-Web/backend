@@ -80,27 +80,41 @@ export const tutorRepository = {
 
     const result = formatTutorUser(data);
 
-    // Lấy danh sách các lớp offline (ClassRequest) từ database mà gia sư được giao, được học viên chọn, hoặc đã ứng tuyển
+    // Lấy danh sách các lớp offline (ClassRequest & OfflineClass) từ database
     try {
       const tutorCode = (result as any).tutor_code;
-      const offlineClasses = await prisma.classRequest.findMany({
-        where: {
-          OR: [
-            ...(tutorCode ? [{ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' as const } }] : []),
-            { applications: { some: { tutor_id: tutorId } } }
-          ]
-        },
-        include: {
-          student: {
-            select: {
-              full_name: true,
-              avatar_url: true
+      const [requests, activeOfflineClasses] = await Promise.all([
+        prisma.classRequest.findMany({
+          where: {
+            OR: [
+              ...(tutorCode ? [{ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' as const } }] : []),
+              { applications: { some: { tutor_id: tutorId } } }
+            ]
+          },
+          include: {
+            student: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
             }
-          }
-        },
-        orderBy: { created_at: 'desc' }
-      });
-      (result as any).offline_classes = offlineClasses || [];
+          },
+          orderBy: { created_at: 'desc' }
+        }),
+        prisma.offlineClass.findMany({
+          where: { tutor_id: tutorId },
+          include: {
+            student: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
+            }
+          },
+          orderBy: { created_at: 'desc' }
+        })
+      ]);
+      (result as any).offline_classes = [...(activeOfflineClasses || []), ...(requests || [])];
     } catch (err) {
       console.error('Error fetching offline classes for tutor:', err);
       (result as any).offline_classes = [];

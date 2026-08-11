@@ -3,6 +3,23 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.tutorRepository = void 0;
 const prisma_1 = require("../config/prisma");
 const supabase_1 = require("../config/supabase");
+const client_1 = require("@prisma/client");
+function mapGradeIdsToEnums(ids) {
+    if (!Array.isArray(ids))
+        return [];
+    return ids.map((id) => {
+        const str = String(id).trim();
+        if (Object.values(client_1.GradeLevel).includes(str))
+            return str;
+        const match = str.match(/(\d+)/);
+        if (match) {
+            const key = `grade_${match[1]}`;
+            if (key in client_1.GradeLevel)
+                return client_1.GradeLevel[key];
+        }
+        return null;
+    }).filter(Boolean);
+}
 function formatTutorUser(tutor) {
     if (!tutor)
         return tutor;
@@ -13,7 +30,6 @@ function formatTutorUser(tutor) {
         tutor.user.full_name = displayName;
         tutor.user.avatar_url = tutor.avatar_url || null;
         tutor.user.phone = tutor.phone || null;
-        tutor.user.bio = tutor.bio || null;
     }
     return tutor;
 }
@@ -35,6 +51,23 @@ exports.tutorRepository = {
         const data = await prisma_1.prisma.tutorProfile.findUnique({
             where: { tutor_id: tutorId },
             include: {
+                certificates: {
+                    orderBy: { created_at: 'desc' }
+                },
+                courses: {
+                    where: { status: 'published' },
+                    select: {
+                        course_id: true,
+                        title: true,
+                        type: true,
+                        price: true,
+                        level: true,
+                        total_sessions: true,
+                        duration_minutes: true,
+                        thumbnail_url: true,
+                        created_at: true
+                    }
+                },
                 user: {
                     select: {
                         email: true
@@ -42,7 +75,50 @@ exports.tutorRepository = {
                 }
             }
         });
-        return formatTutorUser(data);
+        if (!data)
+            return null;
+        const result = formatTutorUser(data);
+        // Lấy danh sách các lớp offline (ClassRequest & OfflineClass) từ database
+        try {
+            const tutorCode = result.tutor_code;
+            const [requests, activeOfflineClasses] = await Promise.all([
+                prisma_1.prisma.classRequest.findMany({
+                    where: {
+                        OR: [
+                            ...(tutorCode ? [{ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' } }] : []),
+                            { applications: { some: { tutor_id: tutorId } } }
+                        ]
+                    },
+                    include: {
+                        student: {
+                            select: {
+                                full_name: true,
+                                avatar_url: true
+                            }
+                        }
+                    },
+                    orderBy: { created_at: 'desc' }
+                }),
+                prisma_1.prisma.offlineClass.findMany({
+                    where: { tutor_id: tutorId },
+                    include: {
+                        student: {
+                            select: {
+                                full_name: true,
+                                avatar_url: true
+                            }
+                        }
+                    },
+                    orderBy: { created_at: 'desc' }
+                })
+            ]);
+            result.offline_classes = [...(activeOfflineClasses || []), ...(requests || [])];
+        }
+        catch (err) {
+            console.error('Error fetching offline classes for tutor:', err);
+            result.offline_classes = [];
+        }
+        return result;
     },
     async findAll() {
         const data = await prisma_1.prisma.tutorProfile.findMany({
@@ -91,7 +167,7 @@ exports.tutorRepository = {
         const activeSchedulesCount = await prisma_1.prisma.courseSchedule.count({
             where: {
                 course: { tutor_id: tutorId },
-                is_booked: true
+                booked_count: { gt: 0 }
             }
         });
         return {
@@ -121,12 +197,6 @@ exports.tutorRepository = {
                 course: {
                     select: {
                         title: true
-                    }
-                },
-                schedule: {
-                    select: {
-                        start_time: true,
-                        end_time: true
                     }
                 }
             },
@@ -162,7 +232,7 @@ exports.tutorRepository = {
             if (booking.schedule_id) {
                 await prisma_1.prisma.courseSchedule.update({
                     where: { schedule_id: booking.schedule_id },
-                    data: { is_booked: true }
+                    data: { booked_count: { increment: 1 } }
                 });
             }
             // Credit wallet of tutor (fetch tutor user_id first)
@@ -194,7 +264,7 @@ exports.tutorRepository = {
             if (booking.schedule_id) {
                 await prisma_1.prisma.courseSchedule.update({
                     where: { schedule_id: booking.schedule_id },
-                    data: { is_booked: false }
+                    data: { booked_count: { decrement: 1 } }
                 });
             }
         }
@@ -253,14 +323,18 @@ exports.tutorRepository = {
         });
         // Format transaction structure to align with UI expectations
         const formattedTransactions = [
-            ...walletTransactions.map((tx) => ({
-                transaction_id: tx.transaction_id,
-                type: 'earning',
-                amount: Number(tx.amount),
-                status: tx.status === 'success' ? 'success' : tx.status === 'pending' ? 'pending' : 'failed',
-                description: tx.description || 'Học phí nhận từ học sinh',
-                created_at: tx.created_at
-            })),
+            ...walletTransactions.map((tx) => {
+                const desc = tx.description || '';
+                const isExpense = desc.toLowerCase().includes('phí nhận lớp');
+                return {
+                    transaction_id: tx.transaction_id,
+                    type: (isExpense ? 'expense' : 'earning'),
+                    amount: Number(tx.amount),
+                    status: tx.status === 'success' ? 'success' : tx.status === 'pending' ? 'pending' : 'failed',
+                    description: tx.description || 'Học phí nhận từ học sinh',
+                    created_at: tx.created_at
+                };
+            }),
             ...payouts.map((po) => ({
                 transaction_id: po.payout_id,
                 type: 'withdrawal',
@@ -283,11 +357,6 @@ exports.tutorRepository = {
         if (!wallet || Number(wallet.balance) < amount) {
             throw new Error('Số dư ví không đủ để rút số tiền này.');
         }
-        // Deduct wallet balance
-        await prisma_1.prisma.wallet.update({
-            where: { user_id: userId },
-            data: { balance: { decrement: amount } }
-        });
         // Create payout record
         const payout = await prisma_1.prisma.payout.create({
             data: {
@@ -302,38 +371,41 @@ exports.tutorRepository = {
         });
         return payout;
     },
-    // Get tutor profile with certificates
+    // Get tutor profile with certificates and grades
     async getMyProfile(userId) {
-        let profile = await prisma_1.prisma.tutorProfile.findUnique({
-            where: { user_id: userId },
-            include: {
-                certificates: {
-                    orderBy: { created_at: 'desc' }
-                },
-                user: {
-                    select: {
-                        email: true
-                    }
+        const includeClause = {
+            certificates: {
+                orderBy: { created_at: 'desc' }
+            },
+            available_times: true,
+            user: {
+                select: {
+                    email: true
                 }
             }
+        };
+        let profile = await prisma_1.prisma.tutorProfile.findUnique({
+            where: { user_id: userId },
+            include: includeClause
         });
         if (!profile) {
+            const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
             // Auto-create tutor profile if missing for tutor role
             profile = await prisma_1.prisma.tutorProfile.create({
                 data: {
                     user_id: userId,
+                    tutor_code: generatedCode,
                     verified_status: 'pending'
                 },
-                include: {
-                    certificates: {
-                        orderBy: { created_at: 'desc' }
-                    },
-                    user: {
-                        select: {
-                            email: true
-                        }
-                    }
-                }
+                include: includeClause
+            });
+        }
+        else if (!profile.tutor_code) {
+            const generatedCode = `GS${Math.floor(1000 + Math.random() * 9000)}`;
+            profile = await prisma_1.prisma.tutorProfile.update({
+                where: { user_id: userId },
+                data: { tutor_code: generatedCode },
+                include: includeClause
             });
         }
         return formatTutorUser(profile);
@@ -342,28 +414,67 @@ exports.tutorRepository = {
     async updateMyProfile(userId, data) {
         const tutor = await this.getMyProfile(userId);
         const updatePayload = {};
-        if (data.fullName !== undefined)
-            updatePayload.full_name = data.fullName;
+        if (data.fullName !== undefined || data.full_name !== undefined) {
+            updatePayload.full_name = data.fullName || data.full_name;
+        }
         if (data.phone !== undefined)
             updatePayload.phone = data.phone;
-        if (data.avatarUrl !== undefined)
-            updatePayload.avatar_url = data.avatarUrl;
-        if (data.bio !== undefined)
-            updatePayload.bio = data.bio;
-        if (data.education !== undefined)
-            updatePayload.education = data.education;
-        if (data.experience_years !== undefined)
-            updatePayload.experience_years = Number(data.experience_years);
-        if (data.hourly_rate !== undefined)
-            updatePayload.hourly_rate = Number(data.hourly_rate);
-        if (data.specialties !== undefined)
-            updatePayload.specialties = data.specialties;
-        if (data.teaching_mode !== undefined)
-            updatePayload.teaching_mode = data.teaching_mode;
-        if (data.province !== undefined)
-            updatePayload.province = data.province;
-        if (data.district !== undefined)
-            updatePayload.district = data.district;
+        if (data.avatarUrl !== undefined || data.avatar_url !== undefined) {
+            updatePayload.avatar_url = data.avatarUrl || data.avatar_url;
+        }
+        if (data.dateOfBirth !== undefined || data.date_of_birth !== undefined) {
+            const dob = data.dateOfBirth || data.date_of_birth;
+            updatePayload.date_of_birth = dob ? new Date(dob) : null;
+        }
+        if (data.gender !== undefined)
+            updatePayload.gender = data.gender;
+        if (data.hometown !== undefined)
+            updatePayload.hometown = data.hometown;
+        if (data.current_address !== undefined || data.currentAddress !== undefined) {
+            updatePayload.current_address = data.current_address || data.currentAddress;
+        }
+        if (data.id_card_front_url !== undefined)
+            updatePayload.id_card_front_url = data.id_card_front_url;
+        if (data.university !== undefined)
+            updatePayload.university = data.university;
+        if (data.major !== undefined)
+            updatePayload.major = data.major;
+        if (data.graduation_year !== undefined || data.graduationYear !== undefined) {
+            updatePayload.graduation_year = Number(data.graduation_year || data.graduationYear);
+        }
+        if (data.current_role !== undefined || data.currentRole !== undefined) {
+            updatePayload.current_role = data.current_role || data.currentRole;
+        }
+        if (data.min_salary_requirement !== undefined || data.minSalaryRequirement !== undefined) {
+            updatePayload.min_salary_requirement = data.min_salary_requirement || data.minSalaryRequirement;
+        }
+        if (data.experience_years !== undefined || data.experienceYears !== undefined) {
+            updatePayload.experience_years = Number(data.experience_years ?? data.experienceYears);
+        }
+        if (data.teaching_mode !== undefined || data.teachingMode !== undefined) {
+            updatePayload.teaching_mode = data.teaching_mode || data.teachingMode;
+        }
+        // Xử lý lưu các khối lớp nhận dạy vào mảng grade_levels (GradeLevel[])
+        const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
+        if (gradeIds !== undefined && Array.isArray(gradeIds)) {
+            updatePayload.grade_levels = mapGradeIdsToEnums(gradeIds);
+        }
+        // Xử lý lưu các khung giờ rảnh dạy vào bảng tutor_available_times
+        const availableTimes = data.available_times || data.availableTimes;
+        if (availableTimes !== undefined && Array.isArray(availableTimes)) {
+            await prisma_1.prisma.tutorAvailableTime.deleteMany({
+                where: { tutor_id: tutor.tutor_id }
+            });
+            if (availableTimes.length > 0) {
+                await prisma_1.prisma.tutorAvailableTime.createMany({
+                    data: availableTimes.map((item) => ({
+                        tutor_id: tutor.tutor_id,
+                        day_of_week: item.day_of_week || item.dayOfWeek,
+                        time_slot: item.time_slot || item.timeSlot
+                    }))
+                });
+            }
+        }
         const updatedProfile = await prisma_1.prisma.tutorProfile.update({
             where: { tutor_id: tutor.tutor_id },
             data: updatePayload,
@@ -371,6 +482,7 @@ exports.tutorRepository = {
                 certificates: {
                     orderBy: { created_at: 'desc' }
                 },
+                available_times: true,
                 user: {
                     select: {
                         email: true
@@ -454,35 +566,8 @@ exports.tutorRepository = {
         });
         return true;
     },
-    // Get ClassSessions for a tutor via their courses and bookings
-    async getClassSessions(tutorId) {
-        const sessions = await prisma_1.prisma.classSession.findMany({
-            where: {
-                booking: {
-                    course: {
-                        tutor_id: tutorId
-                    }
-                }
-            },
-            include: {
-                booking: {
-                    include: {
-                        course: true,
-                        student: true
-                    }
-                }
-            },
-            orderBy: { scheduled_start: 'asc' }
-        });
-        return sessions.map((s) => ({
-            session_id: s.session_id,
-            title: s.title,
-            scheduled_start: s.scheduled_start,
-            scheduled_end: s.scheduled_end,
-            status: s.status,
-            room_id: s.room_id,
-            course_title: s.booking?.course?.title || '',
-            student_name: s.booking?.student?.full_name || 'Học sinh'
-        }));
+    // Get ClassSessions (Tạm thời không dùng)
+    async getClassSessions(_tutorId) {
+        return [];
     }
 };

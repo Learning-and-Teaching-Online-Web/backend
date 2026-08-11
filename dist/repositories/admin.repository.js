@@ -15,8 +15,8 @@ function formatUserWithProfile(user) {
         avatar_url: profile?.avatar_url || null,
         date_of_birth: profile?.date_of_birth || null,
         gender: profile?.gender || null,
-        bio: profile?.bio || null,
-        cccd: user.admin_profile?.cccd || null
+        cccd: user.admin_profile?.cccd || null,
+        position: user.admin_profile?.position || null
     };
 }
 exports.adminRepository = {
@@ -31,7 +31,17 @@ exports.adminRepository = {
             where: { status: { in: ['confirmed', 'completed'] } },
             _sum: { total_amount: true }
         });
-        const totalRevenue = revenueResult._sum.total_amount ? Number(revenueResult._sum.total_amount) : 0;
+        const bookingRevenue = revenueResult._sum.total_amount ? Number(revenueResult._sum.total_amount) : 0;
+        // Tính thêm hoa hồng nhận lớp offline từ bảng transactions
+        const commissionRevenueResult = await prisma_1.prisma.transaction.aggregate({
+            where: {
+                status: 'success',
+                description: { contains: 'Phí nhận lớp', mode: 'insensitive' }
+            },
+            _sum: { amount: true }
+        });
+        const commissionRevenue = commissionRevenueResult._sum.amount ? Number(commissionRevenueResult._sum.amount) : 0;
+        const totalRevenue = bookingRevenue + commissionRevenue;
         const topTutors = await prisma_1.prisma.tutorProfile.findMany({
             orderBy: { rating: 'desc' },
             take: 5,
@@ -358,6 +368,29 @@ exports.adminRepository = {
         if (!payout) {
             throw new Error('Payout request not found');
         }
+        if (payout.status !== 'pending') {
+            throw new Error('Yêu cầu rút tiền này đã được xử lý trước đó.');
+        }
+        // Nếu duyệt thành công (completed), tiến hành trừ tiền ví của gia sư
+        if (status === 'completed') {
+            const tutor = await prisma_1.prisma.tutorProfile.findUnique({
+                where: { tutor_id: payout.tutor_id }
+            });
+            if (!tutor) {
+                throw new Error('Không tìm thấy thông tin gia sư liên quan đến yêu cầu này.');
+            }
+            const wallet = await prisma_1.prisma.wallet.findUnique({
+                where: { user_id: tutor.user_id }
+            });
+            if (!wallet || Number(wallet.balance) < Number(payout.amount)) {
+                throw new Error('Số dư ví của gia sư không đủ để duyệt yêu cầu rút tiền này.');
+            }
+            // Trừ tiền khỏi ví gia sư
+            await prisma_1.prisma.wallet.update({
+                where: { user_id: tutor.user_id },
+                data: { balance: { decrement: payout.amount } }
+            });
+        }
         const updatedPayout = await prisma_1.prisma.payout.update({
             where: { payout_id: payoutId },
             data: {
@@ -365,24 +398,6 @@ exports.adminRepository = {
                 processed_at: new Date()
             }
         });
-        // Refund tutor if payout fails / rejected
-        if (status === 'failed') {
-            const tutor = await prisma_1.prisma.tutorProfile.findUnique({
-                where: { tutor_id: payout.tutor_id }
-            });
-            if (tutor) {
-                await prisma_1.prisma.wallet.upsert({
-                    where: { user_id: tutor.user_id },
-                    create: {
-                        user_id: tutor.user_id,
-                        balance: payout.amount
-                    },
-                    update: {
-                        balance: { increment: payout.amount }
-                    }
-                });
-            }
-        }
         return updatedPayout;
     }
 };
