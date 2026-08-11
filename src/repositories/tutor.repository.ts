@@ -1,5 +1,20 @@
 import { prisma } from '../config/prisma';
 import { supabaseAdmin } from '../config/supabase';
+import { GradeLevel } from '@prisma/client';
+
+function mapGradeIdsToEnums(ids: any[]): GradeLevel[] {
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id: any) => {
+    const str = String(id).trim();
+    if (Object.values(GradeLevel).includes(str as GradeLevel)) return str as GradeLevel;
+    const match = str.match(/(\d+)/);
+    if (match) {
+      const key = `grade_${match[1]}` as keyof typeof GradeLevel;
+      if (key in GradeLevel) return GradeLevel[key];
+    }
+    return null;
+  }).filter(Boolean) as GradeLevel[];
+}
 
 function formatTutorUser(tutor: any) {
   if (!tutor) return tutor;
@@ -39,11 +54,6 @@ export const tutorRepository = {
         certificates: {
           orderBy: { created_at: 'desc' }
         },
-        grades: {
-          include: {
-            grade: true
-          }
-        },
         courses: {
           where: { status: 'published' },
           select: {
@@ -72,11 +82,11 @@ export const tutorRepository = {
 
     // Lấy danh sách các lớp offline (ClassRequest) từ database mà gia sư được giao, được học viên chọn, hoặc đã ứng tuyển
     try {
+      const tutorCode = (result as any).tutor_code;
       const offlineClasses = await prisma.classRequest.findMany({
         where: {
           OR: [
-            { assigned_tutor_id: tutorId },
-            { selected_tutor_id: tutorId },
+            ...(tutorCode ? [{ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' as const } }] : []),
             { applications: { some: { tutor_id: tutorId } } }
           ]
         },
@@ -85,11 +95,6 @@ export const tutorRepository = {
             select: {
               full_name: true,
               avatar_url: true
-            }
-          },
-          grade: {
-            select: {
-              name: true
             }
           }
         },
@@ -400,12 +405,15 @@ export const tutorRepository = {
       certificates: {
         orderBy: { created_at: 'desc' as const }
       },
+<<<<<<< HEAD
       grades: {
         include: {
           grade: true
         }
       },
 <<<<<<< HEAD
+=======
+>>>>>>> a2ced3d (feat: implement repository patterns for tutor and user, add class request and grade controllers, and introduce database utility scripts)
       available_times: true,
 =======
 >>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
@@ -503,24 +511,17 @@ export const tutorRepository = {
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
 =======
     // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades (an toàn, không đụng các dữ liệu khác)
 >>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
+=======
+    // Xử lý lưu các khối lớp nhận dạy vào mảng grade_levels (GradeLevel[])
+>>>>>>> a2ced3d (feat: implement repository patterns for tutor and user, add class request and grade controllers, and introduce database utility scripts)
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
     if (gradeIds !== undefined && Array.isArray(gradeIds)) {
-      await prisma.tutorGrade.deleteMany({
-        where: { tutor_id: tutor.tutor_id }
-      });
-
-      if (gradeIds.length > 0) {
-        await prisma.tutorGrade.createMany({
-          data: gradeIds.map((gId: string) => ({
-            tutor_id: tutor.tutor_id,
-            grade_id: gId
-          }))
-        });
-      }
+      updatePayload.grade_levels = mapGradeIdsToEnums(gradeIds);
     }
 <<<<<<< HEAD
 
@@ -551,12 +552,15 @@ export const tutorRepository = {
         certificates: {
           orderBy: { created_at: 'desc' }
         },
+<<<<<<< HEAD
         grades: {
           include: {
             grade: true
           }
         },
 <<<<<<< HEAD
+=======
+>>>>>>> a2ced3d (feat: implement repository patterns for tutor and user, add class request and grade controllers, and introduce database utility scripts)
         available_times: true,
 =======
 >>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
