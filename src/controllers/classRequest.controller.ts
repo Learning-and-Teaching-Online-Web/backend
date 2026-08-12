@@ -759,7 +759,7 @@ export const classRequestController = {
     }
   },
 
-  // 6. Admin Duyệt mở lớp công khai (PENDING_ADMIN -> OPEN)
+  // 6. Admin Duyệt mở lớp (PENDING_ADMIN -> WAITING_TUTOR_CONFIRM hoặc OPEN)
   async adminApproveOpen(req: Request, res: Response) {
     try {
       const id = String(req.params.id || '').trim();
@@ -780,18 +780,238 @@ export const classRequestController = {
         return res.status(400).json({ message: `Lớp học đã ở trạng thái ${existingClass.status}, không thể mở duyệt.` });
       }
 
-      const updated = await (prisma as any).classRequest.update({
-        where: { request_id: existingClass.request_id },
-        data: { status: 'OPEN' },
-      });
+      const selCode = existingClass.selected_tutor_code ? String(existingClass.selected_tutor_code).trim() : '';
 
-      return res.json({
-        message: 'Đã duyệt mở lớp công khai (OPEN) thành công!',
-        data: formatClassRequestResponse(updated),
-      });
+      let targetTutor: any = null;
+      if (selCode) {
+        targetTutor = await (prisma as any).tutorProfile.findFirst({
+          where: {
+            OR: [
+              { tutor_code: { equals: selCode, mode: 'insensitive' } },
+              { phone: { equals: selCode, mode: 'insensitive' } },
+            ],
+          },
+        });
+      }
+
+      if (targetTutor) {
+        const updated = await (prisma as any).classRequest.update({
+          where: { request_id: existingClass.request_id },
+          data: { status: 'WAITING_TUTOR_CONFIRM' },
+        });
+
+        return res.json({
+          message: `Đã duyệt yêu cầu bài đăng! Hệ thống đã chuyển sang gửi lời mời trực tiếp đến Gia sư MS:${targetTutor.tutor_code || selCode}.`,
+          data: formatClassRequestResponse(updated),
+        });
+      } else {
+        const updated = await (prisma as any).classRequest.update({
+          where: { request_id: existingClass.request_id },
+          data: { status: 'OPEN' },
+        });
+
+        return res.json({
+          message: 'Đã duyệt mở lớp công khai (OPEN) thành công!',
+          data: formatClassRequestResponse(updated),
+        });
+      }
     } catch (error: any) {
       console.error('Error admin approving class:', error);
       return res.status(500).json({ message: 'Lỗi khi duyệt mở lớp.', error: error.message });
+    }
+  },
+
+  // 6b. Admin Từ chối bài đăng tìm gia sư (PENDING_ADMIN -> REJECTED)
+  async adminRejectClass(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id || '').trim();
+      const { admin_note } = req.body;
+
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(id);
+
+      const existingClass = await (prisma as any).classRequest.findFirst({
+        where: isUuid
+          ? { OR: [{ request_id: id }, { class_code: id }] }
+          : { class_code: id },
+      });
+
+      if (!existingClass) {
+        return res.status(404).json({ message: 'Không tìm thấy lớp học.' });
+      }
+
+      if (['CANCELLED', 'EXPIRED', 'REJECTED'].includes(existingClass.status)) {
+        return res.status(400).json({ message: `Lớp học đã ở trạng thái ${existingClass.status}, không thể từ chối.` });
+      }
+
+      const updated = await (prisma as any).classRequest.update({
+        where: { request_id: existingClass.request_id },
+        data: {
+          status: 'REJECTED',
+          admin_note: admin_note ? String(admin_note).trim() : 'Admin từ chối bài đăng.',
+        },
+      });
+
+      return res.json({
+        message: 'Đã từ chối bài đăng tìm gia sư thành công.',
+        data: formatClassRequestResponse(updated),
+      });
+    } catch (error: any) {
+      console.error('Error admin rejecting class:', error);
+      return res.status(500).json({ message: 'Lỗi khi từ chối bài đăng.', error: error.message });
+    }
+  },
+
+  // 6c. Gia sư Phản hồi Lời mời chỉ định trực tiếp (WAITING_TUTOR_CONFIRM -> ACCEPT hoặc DECLINE)
+  async tutorRespondDirectClass(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư.' });
+      }
+
+      const id = String(req.params.id || '').trim();
+      const { action } = req.body;
+
+      if (!['ACCEPT', 'DECLINE'].includes(action)) {
+        return res.status(400).json({ message: 'Hành động không hợp lệ (ACCEPT hoặc DECLINE).' });
+      }
+
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(id);
+
+      const classRequest = await (prisma as any).classRequest.findFirst({
+        where: isUuid
+          ? { OR: [{ request_id: id }, { class_code: id }] }
+          : { class_code: id },
+        include: { student: { select: { user_id: true } } },
+      });
+
+      if (!classRequest) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+
+      if (classRequest.status !== 'WAITING_TUTOR_CONFIRM' && classRequest.status !== 'OPEN') {
+        return res.status(400).json({ message: `Lớp học ở trạng thái ${classRequest.status}, không thể thực hiện thao tác này.` });
+      }
+
+      const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+        where: { user_id: user.user_id },
+      });
+
+      if (!tutorProfile) {
+        return res.status(403).json({ message: 'Không tìm thấy hồ sơ Gia sư của bạn.' });
+      }
+
+      const tutorCode = tutorProfile.tutor_code ? String(tutorProfile.tutor_code).trim().toLowerCase() : '';
+      const tutorPhone = tutorProfile.phone ? String(tutorProfile.phone).trim() : '';
+      const selCode = classRequest.selected_tutor_code ? String(classRequest.selected_tutor_code).trim().toLowerCase() : '';
+
+      const isDirectedToMe = selCode !== '' && (
+        (tutorCode && selCode.includes(tutorCode)) ||
+        (tutorPhone && selCode.includes(tutorPhone))
+      );
+
+      if (!isDirectedToMe) {
+        return res.status(403).json({ message: 'Bạn không phải Gia sư được chỉ định trực tiếp cho lớp này.' });
+      }
+
+      if (action === 'DECLINE') {
+        const updated = await (prisma as any).classRequest.update({
+          where: { request_id: classRequest.request_id },
+          data: {
+            status: 'OPEN',
+            selected_tutor_code: null,
+          },
+        });
+
+        return res.json({
+          message: 'Bạn đã từ chối nhận lớp chỉ định. Yêu cầu đã được chuyển sang bài đăng công khai (OPEN).',
+          data: formatClassRequestResponse(updated),
+        });
+      }
+
+      let studentUserId = classRequest.student?.user_id || null;
+      if (!studentUserId && classRequest.student_id) {
+        const studentProfile = await (prisma as any).studentProfile.findUnique({
+          where: { student_id: classRequest.student_id },
+          select: { user_id: true },
+        });
+        studentUserId = studentProfile?.user_id || null;
+      }
+      if (!studentUserId && classRequest.email) {
+        const userByEmail = await (prisma as any).user.findFirst({
+          where: { email: { equals: classRequest.email, mode: 'insensitive' } },
+          select: { user_id: true },
+        });
+        studentUserId = userByEmail?.user_id || null;
+      }
+
+      if (!studentUserId) {
+        return res.status(400).json({ message: 'Lớp học này chưa có tài khoản Học viên liên kết để tạo nghĩa vụ nộp học phí escrow.' });
+      }
+
+      const salary = Number(classRequest.class_salary || 0);
+      const commissionAmount = salary * 0.35;
+
+      let existingApp = await (prisma as any).classApplication.findFirst({
+        where: { class_request_id: classRequest.request_id, tutor_id: tutorProfile.tutor_id },
+      });
+
+      if (!existingApp) {
+        existingApp = await (prisma as any).classApplication.create({
+          data: {
+            class_request_id: classRequest.request_id,
+            tutor_id: tutorProfile.tutor_id,
+            applicant_phone: tutorProfile.phone || user.email || '',
+            available_from: new Date(),
+            notes: 'Gia sư nhận lời mời chỉ định trực tiếp',
+            status: 'APPROVED',
+          },
+        });
+      } else {
+        await (prisma as any).classApplication.update({
+          where: { application_id: existingApp.application_id },
+          data: { status: 'APPROVED' },
+        });
+      }
+
+      const [updatedClass] = await (prisma as any).$transaction([
+        (prisma as any).classRequest.update({
+          where: { request_id: classRequest.request_id },
+          data: {
+            status: 'WAITING_PAYMENT',
+            payment_deadline: new Date(Date.now() + env.escrowPaymentDeadlineHours * 60 * 60 * 1000),
+            selected_tutor_code: tutorProfile.tutor_code,
+          },
+        }),
+        (prisma as any).offlineClassPayment.create({
+          data: {
+            class_request_id: classRequest.request_id,
+            payer_user_id: studentUserId,
+            type: 'STUDENT_TUITION',
+            status: 'PENDING',
+            required_amount: salary,
+          },
+        }),
+        (prisma as any).offlineClassPayment.create({
+          data: {
+            class_request_id: classRequest.request_id,
+            payer_user_id: user.user_id,
+            type: 'TUTOR_PLACEMENT_FEE',
+            status: 'PENDING',
+            required_amount: commissionAmount,
+          },
+        }),
+      ]);
+
+      return res.json({
+        message: 'Bạn đã đồng ý nhận lớp chỉ định! Hệ thống chuyển sang đếm ngược 48h nộp tiền giữ chỗ (Escrow).',
+        data: formatClassRequestResponse(updatedClass),
+      });
+    } catch (error: any) {
+      console.error('Error in tutorRespondDirectClass:', error);
+      return res.status(500).json({ message: 'Lỗi khi phản hồi nhận lớp chỉ định.', error: error.message });
     }
   },
 
@@ -1427,6 +1647,8 @@ export const classRequestController = {
           my_application_status: myApp ? myApp.status : null,
           tutor_payment_status: tutorPayment?.status || 'PENDING',
           fee_amount: tutorPayment ? Number(tutorPayment.required_amount) : Number(cls.class_salary) * 0.35,
+          payment_deadline: cls.payment_deadline ? (cls.payment_deadline instanceof Date ? cls.payment_deadline.toISOString() : cls.payment_deadline) : undefined,
+          payments: cls.payments || [],
         };
       });
 

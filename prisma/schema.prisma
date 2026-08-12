@@ -1225,6 +1225,7 @@ model CourseComment {
 
 enum ClassRequestStatus {
   PENDING_ADMIN // Mới tạo, chờ Admin kiểm tra và duyệt mở lớp
+  WAITING_TUTOR_CONFIRM // Được Admin duyệt, đang chờ Gia sư được chỉ định xác nhận nhận lớp
   WAITING_PAYMENT // Gia sư đã được chọn (ClassApplication APPROVED), đang chờ Học viên đóng học phí VÀ Gia sư đóng phí nhận lớp (xem OfflineClassPayment). Khi cả 2 đã PAID -> hệ thống tạo OfflineClass và xóa record này
   OPEN // Lớp chưa giao / Đang cần gia sư (Hiển thị danh sách công khai). Cũng là trạng thái được MỞ LẠI khi Gia sư trễ hạn thanh toán (lỗi thuộc về Gia sư -> hoàn tiền Học viên đã đóng nếu có, request vẫn còn giá trị nên quay lại OPEN cho Gia sư khác ứng tuyển)
   REJECTED // Admin từ chối yêu cầu

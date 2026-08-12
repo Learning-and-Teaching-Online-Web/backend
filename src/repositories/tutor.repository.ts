@@ -504,6 +504,11 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
+    if (tutor.verified_status === 'rejected') {
+      updatePayload.verified_status = 'pending';
+      updatePayload.admin_note = null;
+    }
+
     // Xử lý lưu các khối lớp nhận dạy vào mảng grade_levels (GradeLevel[])
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
     if (gradeIds !== undefined && Array.isArray(gradeIds)) {
@@ -624,6 +629,12 @@ export const tutorRepository = {
         expiry_date: data.expiry_date ? new Date(data.expiry_date) : null,
         status: 'pending'
       }
+    });
+
+    // Reset profile status to pending if previously rejected when adding a new certificate
+    await prisma.tutorProfile.updateMany({
+      where: { tutor_id: tutorId, verified_status: 'rejected' },
+      data: { verified_status: 'pending', admin_note: null }
     });
 
     return cert;

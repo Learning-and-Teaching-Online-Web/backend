@@ -37,6 +37,7 @@ adminRoutes.patch('/payouts/:payoutId/status', adminController.updatePayoutStatu
 // 6. Offline Class Requests management
 adminRoutes.get('/class-requests', classRequestController.adminGetAll);
 adminRoutes.patch('/class-requests/:id/approve-open', classRequestController.adminApproveOpen);
+adminRoutes.patch('/class-requests/:id/reject', classRequestController.adminRejectClass);
 adminRoutes.patch('/class-requests/:id/assign-tutor', classRequestController.adminAssignTutor);
 adminRoutes.put('/class-requests/:id', classRequestController.adminUpdateClassRequest);
 
