@@ -214,6 +214,7 @@ model TutorProfile {
   review_count    Int                @default(0) // Tổng số lượng đánh giá nhận được
   teaching_mode   TeachingMode       @default(both) // Hình thức dạy (online/offline/both)
   verified_status VerificationStatus @default(pending) // Trạng thái phê duyệt hồ sơ gia sư từ Admin
+  admin_note      String?            // Lý do Admin từ chối hồ sơ (bắt buộc điền khi status = rejected)
   is_featured     Boolean            @default(false) // Đánh dấu gia sư nổi bật
 
   // 5. Timestamps
@@ -1337,6 +1338,7 @@ model OfflineClass {
   class_id   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tutor_id   String  @db.Uuid // FK → tutor_profiles.tutor_id (gia sư nhận lớp)
   student_id String? @db.Uuid // FK → student_profiles.student_id (nếu học viên đăng nhập)
+  subject_id String? @db.Uuid // FK → subjects.subject_id (môn học)
 
   // 2. Snapshot thông tin lớp học (copy từ ClassRequest tại thời điểm giao)
   class_offline_code String? // Mã lớp gốc (copy từ ClassRequest.class_code)

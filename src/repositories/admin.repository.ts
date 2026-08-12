@@ -65,8 +65,8 @@ export const adminRepository = {
       where: { status: 'cancelled' }
     });
 
-    const completionRate = totalBookings > 0 
-      ? Math.round((completedBookings / totalBookings) * 100) 
+    const completionRate = totalBookings > 0
+      ? Math.round((completedBookings / totalBookings) * 100)
       : 0;
 
     return {
@@ -214,10 +214,13 @@ export const adminRepository = {
     return { tutors: mappedTutors, total };
   },
 
-  async updateTutorVerificationStatus(tutorId: string, status: VerificationStatus) {
+  async updateTutorVerificationStatus(tutorId: string, status: VerificationStatus, adminNote?: string) {
     const profile = await prisma.tutorProfile.update({
       where: { tutor_id: tutorId },
-      data: { verified_status: status }
+      data: {
+        verified_status: status,
+        admin_note: status === 'rejected' ? adminNote : null
+      }
     });
 
     // Automatically update pending certificates matching the profile status
@@ -229,7 +232,7 @@ export const adminRepository = {
     } else if (status === 'rejected') {
       await prisma.tutorCertificate.updateMany({
         where: { tutor_id: tutorId, status: 'pending' },
-        data: { status: 'rejected' }
+        data: { status: 'rejected', admin_note: adminNote }
       });
     }
 

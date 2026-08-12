@@ -29,11 +29,41 @@ function formatClassRequestResponse(cls: any) {
   if (!cls) return cls;
   return {
     ...cls,
+    record_type: 'class_request',
     code: cls.class_code || cls.class_offline_code || cls.code || '',
     class_code: cls.class_code || cls.class_offline_code || cls.code || '',
     grade_level: formatGradeLevel(cls.grade_level),
     subject_name: cls.subject?.name || cls.subject_name || '',
     desired_price: cls.class_salary ? Number(cls.class_salary) : Number(cls.desired_price || 0),
+  };
+}
+
+function formatOfflineClassResponse(cls: any, extraSubjectName?: string) {
+  if (!cls) return cls;
+  return {
+    request_id: cls.class_id,
+    record_type: 'offline_class',
+    code: cls.class_offline_code || '',
+    class_code: cls.class_offline_code || '',
+    student_name: cls.student_name,
+    phone: cls.phone,
+    email: cls.email || '',
+    address_detail: cls.address_detail,
+    district: cls.district || '',
+    province: cls.province || '',
+    grade_level: formatGradeLevel(cls.grade_level),
+    subject_id: cls.subject_id || null,
+    subject_name: extraSubjectName || cls.subject?.name || cls.subject_name || '',
+    num_students: cls.num_students || 1,
+    academic_level: cls.academic_level || '',
+    sessions_per_week: cls.sessions_per_week || 2,
+    study_time: cls.study_time || '',
+    desired_price: Number(cls.class_salary || 0),
+    commission_rate: Number(cls.commission_rate || 35),
+    status: cls.status,
+    assigned_tutor: cls.tutor ? { full_name: cls.tutor.full_name, phone: cls.tutor.phone } : undefined,
+    created_at: cls.created_at || cls.assigned_at,
+    _count: undefined,
   };
 }
 
@@ -96,6 +126,7 @@ async function checkAndActivateOfflineClass(classRequestId: string) {
         district: classRequest.district,
         province: classRequest.province,
         grade_level: classRequest.grade_level,
+        subject_id: classRequest.subject_id,
         num_students: classRequest.num_students,
         academic_level: classRequest.academic_level,
         sessions_per_week: classRequest.sessions_per_week,
@@ -392,7 +423,10 @@ export const classRequestController = {
             orderBy: { created_at: 'desc' },
             include: {
               tutor: {
-                select: { tutor_id: true, full_name: true, avatar_url: true, phone: true },
+                include: {
+                  certificates: true,
+                  user: { select: { email: true } },
+                },
               },
             },
           },
@@ -414,9 +448,14 @@ export const classRequestController = {
         });
 
         if (offlineClass) {
+          let extraSubName = '';
+          if (offlineClass.subject_id) {
+            const sub = await (prisma as any).subject.findUnique({ where: { subject_id: offlineClass.subject_id } });
+            if (sub) extraSubName = sub.name;
+          }
           return res.json({
             data: {
-              ...formatClassRequestResponse(offlineClass),
+              ...formatOfflineClassResponse(offlineClass, extraSubName),
               is_active_offline_class: true,
               tutor: offlineClass.tutor,
               student: offlineClass.student,
@@ -429,14 +468,26 @@ export const classRequestController = {
         return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
       }
 
+      const reqUser = (req as any).user;
+      const isAdmin = reqUser?.role === 'admin';
+
       const sanitizedApplications = (classRequest.applications || []).map((app: any) => ({
         ...app,
-        applicant_phone: undefined,
+        applicant_phone: isAdmin ? (app.applicant_phone || app.tutor?.phone || '') : undefined,
         tutor: app.tutor
           ? {
               tutor_id: app.tutor.tutor_id,
-              full_name: app.tutor.full_name,
-              avatar_url: app.tutor.avatar_url,
+              tutor_code: app.tutor.tutor_code || '',
+              full_name: app.tutor.full_name || '',
+              avatar_url: app.tutor.avatar_url || '',
+              phone: isAdmin ? (app.tutor.phone || app.applicant_phone || '') : undefined,
+              email: isAdmin ? app.tutor.user?.email : undefined,
+              university: app.tutor.university || '',
+              major: app.tutor.major || '',
+              current_role: app.tutor.current_role || '',
+              experience_years: app.tutor.experience_years || 0,
+              rating: app.tutor.rating ? Number(app.tutor.rating) : 0,
+              certificates: app.tutor.certificates || [],
             }
           : undefined,
       }));
@@ -523,19 +574,115 @@ export const classRequestController = {
     }
   },
 
-  // 5. Admin Lấy danh sách bài yêu cầu
+  // 5. Admin Lấy danh sách bài yêu cầu (gộp cả ClassRequest và OfflineClass)
   async adminGetAll(req: Request, res: Response) {
     try {
       const { status, search, page = 1, limit = 50 } = req.query;
 
-      const where: any = {};
-      if (status && status !== 'all') {
-        where.status = String(status);
+      const searchStr = search ? String(search).trim().replace(/^MS:\s*/i, '') : '';
+      const take = Number(limit);
+      const skip = (Number(page) - 1) * take;
+      const statusStr = status ? String(status) : 'all';
+
+      // Neu filter theo tab OfflineClass cu the:
+      if (statusStr === 'OFFLINE_ACTIVE' || statusStr === 'OFFLINE_CANCELLED') {
+        const targetStatus = statusStr === 'OFFLINE_ACTIVE' ? 'ACTIVE' : 'CANCELLED';
+        const offlineClassWhere: any = { status: targetStatus };
+
+        let matchingSubjectIds: string[] = [];
+        if (searchStr) {
+          const matchingSubjects = await (prisma as any).subject.findMany({
+            where: { name: { contains: searchStr, mode: 'insensitive' } },
+            select: { subject_id: true },
+          });
+          matchingSubjectIds = matchingSubjects.map((s: any) => s.subject_id);
+
+          offlineClassWhere.OR = [
+            { class_offline_code: { contains: searchStr, mode: 'insensitive' } },
+            { student_name: { contains: searchStr, mode: 'insensitive' } },
+            { phone: { contains: searchStr, mode: 'insensitive' } },
+            { address_detail: { contains: searchStr, mode: 'insensitive' } },
+            { district: { contains: searchStr, mode: 'insensitive' } },
+            ...(matchingSubjectIds.length > 0 ? [{ subject_id: { in: matchingSubjectIds } }] : []),
+          ];
+        }
+
+        const [total, items] = await Promise.all([
+          (prisma as any).offlineClass.count({ where: offlineClassWhere }),
+          (prisma as any).offlineClass.findMany({
+            where: offlineClassWhere,
+            take,
+            skip,
+            orderBy: { created_at: 'desc' },
+            include: {
+              tutor: { select: { full_name: true, phone: true } },
+            },
+          }),
+        ]);
+
+        const ocSubIds = items.map((i: any) => i.subject_id).filter(Boolean);
+        const ocSubs = ocSubIds.length > 0
+          ? await (prisma as any).subject.findMany({ where: { subject_id: { in: ocSubIds } } })
+          : [];
+        const ocSubMap = new Map(ocSubs.map((s: any) => [s.subject_id, s.name]));
+
+        const formattedItems = items.map((cls: any) => formatOfflineClassResponse(cls, cls.subject_id ? (ocSubMap.get(cls.subject_id) as string) : undefined));
+
+        return res.json({
+          total,
+          page: Number(page),
+          limit: take,
+          totalPages: Math.ceil(total / take),
+          data: formattedItems,
+        });
       }
 
-      if (search) {
-        const searchStr = String(search).trim().replace(/^MS:\s*/i, '');
-        where.OR = [
+      // Neu filter theo tab ClassRequest cu the (khac 'all'):
+      if (statusStr !== 'all') {
+        const classRequestWhere: any = { status: statusStr };
+        if (searchStr) {
+          classRequestWhere.OR = [
+            { class_code: { contains: searchStr, mode: 'insensitive' } },
+            { student_name: { contains: searchStr, mode: 'insensitive' } },
+            { phone: { contains: searchStr, mode: 'insensitive' } },
+            { address_detail: { contains: searchStr, mode: 'insensitive' } },
+            { district: { contains: searchStr, mode: 'insensitive' } },
+            { subject: { name: { contains: searchStr, mode: 'insensitive' } } },
+          ];
+        }
+
+        const [total, items] = await Promise.all([
+          (prisma as any).classRequest.count({ where: classRequestWhere }),
+          (prisma as any).classRequest.findMany({
+            where: classRequestWhere,
+            take,
+            skip,
+            orderBy: { created_at: 'desc' },
+            include: {
+              subject: { select: { name: true } },
+              payments: true,
+              _count: { select: { applications: true } },
+            },
+          }),
+        ]);
+
+        const formattedItems = items.map((cls: any) => formatClassRequestResponse(cls));
+
+        return res.json({
+          total,
+          page: Number(page),
+          limit: take,
+          totalPages: Math.ceil(total / take),
+          data: formattedItems,
+        });
+      }
+
+      // Khi status === 'all': query ca ClassRequest va OfflineClass roi merge & sort
+      const classRequestWhere: any = {};
+      const offlineClassWhere: any = {};
+
+      if (searchStr) {
+        classRequestWhere.OR = [
           { class_code: { contains: searchStr, mode: 'insensitive' } },
           { student_name: { contains: searchStr, mode: 'insensitive' } },
           { phone: { contains: searchStr, mode: 'insensitive' } },
@@ -543,17 +690,27 @@ export const classRequestController = {
           { district: { contains: searchStr, mode: 'insensitive' } },
           { subject: { name: { contains: searchStr, mode: 'insensitive' } } },
         ];
+
+        const matchingSubjects = await (prisma as any).subject.findMany({
+          where: { name: { contains: searchStr, mode: 'insensitive' } },
+          select: { subject_id: true },
+        });
+        const matchingSubjectIds = matchingSubjects.map((s: any) => s.subject_id);
+
+        offlineClassWhere.OR = [
+          { class_offline_code: { contains: searchStr, mode: 'insensitive' } },
+          { student_name: { contains: searchStr, mode: 'insensitive' } },
+          { phone: { contains: searchStr, mode: 'insensitive' } },
+          { address_detail: { contains: searchStr, mode: 'insensitive' } },
+          { district: { contains: searchStr, mode: 'insensitive' } },
+          ...(matchingSubjectIds.length > 0 ? [{ subject_id: { in: matchingSubjectIds } }] : []),
+        ];
       }
 
-      const take = Number(limit);
-      const skip = (Number(page) - 1) * take;
-
-      const [total, items] = await Promise.all([
-        (prisma as any).classRequest.count({ where }),
+      const [crTotal, crItems, ocTotal, ocItems] = await Promise.all([
+        (prisma as any).classRequest.count({ where: classRequestWhere }),
         (prisma as any).classRequest.findMany({
-          where,
-          take,
-          skip,
+          where: classRequestWhere,
           orderBy: { created_at: 'desc' },
           include: {
             subject: { select: { name: true } },
@@ -561,16 +718,40 @@ export const classRequestController = {
             _count: { select: { applications: true } },
           },
         }),
+        (prisma as any).offlineClass.count({ where: offlineClassWhere }),
+        (prisma as any).offlineClass.findMany({
+          where: offlineClassWhere,
+          orderBy: { created_at: 'desc' },
+          include: {
+            tutor: { select: { full_name: true, phone: true } },
+          },
+        }),
       ]);
 
-      const formattedItems = items.map((cls: any) => formatClassRequestResponse(cls));
+      const ocSubIds = ocItems.map((i: any) => i.subject_id).filter(Boolean);
+      const ocSubs = ocSubIds.length > 0
+        ? await (prisma as any).subject.findMany({ where: { subject_id: { in: ocSubIds } } })
+        : [];
+      const ocSubMap = new Map(ocSubs.map((s: any) => [s.subject_id, s.name]));
+
+      const formattedCr = crItems.map((cls: any) => formatClassRequestResponse(cls));
+      const formattedOc = ocItems.map((cls: any) => formatOfflineClassResponse(cls, cls.subject_id ? (ocSubMap.get(cls.subject_id) as string) : undefined));
+
+      const merged = [...formattedCr, ...formattedOc].sort((a: any, b: any) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const total = crTotal + ocTotal;
+      const paginatedData = merged.slice(skip, skip + take);
 
       return res.json({
         total,
         page: Number(page),
         limit: take,
         totalPages: Math.ceil(total / take),
-        data: formattedItems,
+        data: paginatedData,
       });
     } catch (error: any) {
       console.error('Error admin get class requests:', error);
@@ -1128,6 +1309,33 @@ export const classRequestController = {
       });
 
       if (!existing) return res.status(404).json({ message: 'Không tìm thấy yêu cầu lớp học.' });
+
+      // Kiểm tra quyền sở hữu đối với ClassRequest (student_id, email, phone, hoặc Admin)
+      let studentProfile: any = null;
+      if (user.user_id && uuidRegex.test(String(user.user_id))) {
+        studentProfile = await (prisma as any).studentProfile.findUnique({
+          where: { user_id: user.user_id },
+        });
+      }
+
+      const userRole = String(user.role || '').toLowerCase();
+      const isOwner =
+        userRole === 'admin' ||
+        (studentProfile && existing.student_id === studentProfile.student_id) ||
+        (user.email && existing.email && String(existing.email).trim().toLowerCase() === String(user.email).trim().toLowerCase()) ||
+        (studentProfile?.phone && existing.phone && String(studentProfile.phone).trim() === String(existing.phone).trim());
+
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa yêu cầu lớp học này.' });
+      }
+
+      // Tự động liên kết student_id nếu lớp chưa được gắn student_id
+      if (studentProfile && !existing.student_id) {
+        await (prisma as any).classRequest.update({
+          where: { request_id: existing.request_id },
+          data: { student_id: studentProfile.student_id },
+        });
+      }
 
       const updateData: any = {};
       const priceInput = class_salary !== undefined ? class_salary : desired_price;
