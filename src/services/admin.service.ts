@@ -67,11 +67,14 @@ export const adminService = {
     };
   },
 
-  async updateTutorVerification(tutorId: string, status: string) {
+  async updateTutorVerification(tutorId: string, status: string, adminNote?: string) {
     if (!Object.values(VerificationStatus).includes(status as VerificationStatus)) {
       throw new Error('Trạng thái xác thực không hợp lệ');
     }
-    return await adminRepository.updateTutorVerificationStatus(tutorId, status as VerificationStatus);
+    if (status === 'rejected' && !adminNote?.trim()) {
+      throw new Error('Vui lòng nhập lý do từ chối hồ sơ.');
+    }
+    return await adminRepository.updateTutorVerificationStatus(tutorId, status as VerificationStatus, adminNote);
   },
 
   async getTutorCertificates(tutorId: string) {

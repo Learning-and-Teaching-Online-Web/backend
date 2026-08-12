@@ -71,12 +71,12 @@ export const adminController = {
   async updateTutorVerification(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const tutorId = req.params.tutorId as string;
-      const { status } = req.body;
+      const { status, adminNote } = req.body;
       if (!status) {
         res.status(400).json({ success: false, error: 'Thiếu trạng thái phê duyệt' });
         return;
       }
-      const profile = await adminService.updateTutorVerification(tutorId, status);
+      const profile = await adminService.updateTutorVerification(tutorId, status, adminNote);
       res.status(200).json({ success: true, message: 'Cập nhật hồ sơ gia sư thành công', data: profile });
     } catch (error: any) {
       console.error('Error in updateTutorVerification:', error);
@@ -103,6 +103,11 @@ export const adminController = {
 
       if (!status) {
         res.status(400).json({ success: false, error: 'Thiếu trạng thái duyệt chứng chỉ' });
+        return;
+      }
+
+      if (status === 'rejected' && !adminNote?.trim()) {
+        res.status(400).json({ success: false, error: 'Vui lòng nhập lý do từ chối chứng chỉ.' });
         return;
       }
 
