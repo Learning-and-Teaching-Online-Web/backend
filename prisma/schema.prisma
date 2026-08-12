@@ -1306,8 +1306,9 @@ model ClassRequest {
   other_requirements  String? // Yêu cầu khác
 
   // 4. Status & Administrative Notes
-  status     ClassRequestStatus @default(PENDING_ADMIN)
-  admin_note String? // Lý do từ chối hoặc ghi chú quản trị của Admin
+  status           ClassRequestStatus @default(PENDING_ADMIN)
+  payment_deadline DateTime?          @db.Timestamptz // Hạn chót đóng đủ 2 khoản escrow kể từ khi chuyển WAITING_PAYMENT; NULL nếu chưa vào giai đoạn này. Đọc bởi cron job tự động xử lý trễ hạn (xem src/jobs/escrowExpiration.job.ts)
+  admin_note       String? // Lý do từ chối hoặc ghi chú quản trị của Admin
 
   // 5. Timestamps
   created_at DateTime @default(now()) @db.Timestamptz
@@ -1320,6 +1321,7 @@ model ClassRequest {
   payments     OfflineClassPayment[] // Các khoản tiền giữ chỗ (học phí học viên / phí nhận lớp gia sư) đang chờ thanh toán ở giai đoạn "giỏ hàng" này
 
   @@index([status, created_at(sort: Desc)], map: "idx_class_requests_status")
+  @@index([status, payment_deadline], map: "idx_class_requests_payment_deadline")
   @@index([province, district], map: "idx_class_requests_location")
   @@map("class_requests")
 }

@@ -1,4 +1,5 @@
 import { prisma } from '../src/config/prisma';
+import { mapToGradeLevel } from '../src/controllers/classRequest.controller';
 
 async function seedOfflineData() {
   console.log('🌱 Seeding Offline Tutoring Reference Prices & Sample Classes...');
@@ -55,7 +56,6 @@ async function seedOfflineData() {
       study_time: 'Dạy 120 phút/ buổi, các tối 18h-20 h',
       tutor_requirement: 'Nữ Sinh Viên',
       desired_price: 2000000,
-      commission_rate: 35,
       status: 'OPEN' as const,
     },
     {
@@ -73,7 +73,6 @@ async function seedOfflineData() {
       study_time: 'Dạy 120 phút/buổi, T2,4,6 tối 18h',
       tutor_requirement: 'Nữ Sinh Viên',
       desired_price: 2640000,
-      commission_rate: 35,
       status: 'OPEN' as const,
     },
     {
@@ -91,7 +90,6 @@ async function seedOfflineData() {
       study_time: 'Dạy 120 phút/buổi, T2 đến T6 19h',
       tutor_requirement: 'Nữ Sinh Viên',
       desired_price: 5000000,
-      commission_rate: 30,
       status: 'OPEN' as const,
     },
     {
@@ -109,16 +107,38 @@ async function seedOfflineData() {
       study_time: 'Dạy 90 phút/buổi, T7, CN rảnh',
       tutor_requirement: 'Nữ Giáo Viên',
       desired_price: 2800000,
-      commission_rate: 35,
       status: 'OPEN' as const,
     },
   ];
 
   for (const item of sampleClasses) {
+    const cleanSubject = item.subject_name.split('.')[0].trim();
+    const foundSubject = await (prisma as any).subject.findFirst({
+      where: { name: { contains: cleanSubject, mode: 'insensitive' } },
+    });
+
+    const payload = {
+      class_code: item.code,
+      student_name: item.student_name,
+      phone: item.phone,
+      address_detail: item.address_detail,
+      district: item.district,
+      province: item.province,
+      grade_level: mapToGradeLevel(item.grade_level),
+      subject_id: foundSubject?.subject_id || null,
+      num_students: item.num_students,
+      academic_level: item.academic_level,
+      sessions_per_week: item.sessions_per_week,
+      study_time: item.study_time,
+      tutor_requirement: item.tutor_requirement,
+      class_salary: item.desired_price,
+      status: item.status,
+    };
+
     await (prisma as any).classRequest.upsert({
-      where: { code: item.code },
-      update: item,
-      create: item,
+      where: { class_code: item.code },
+      update: payload,
+      create: payload,
     });
   }
 

@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { GradeLevel } from '@prisma/client';
+import { env } from '../config/env';
 
-function mapToGradeLevel(val: any): GradeLevel | null {
+export function mapToGradeLevel(val: any): GradeLevel | null {
   if (!val) return null;
   const str = String(val).trim();
   if (Object.values(GradeLevel).includes(str as GradeLevel)) return str as GradeLevel;
@@ -28,82 +29,162 @@ function formatClassRequestResponse(cls: any) {
 
 // Helper: Kiểm tra nếu cả 2 khoản escrow (STUDENT_TUITION & TUTOR_PLACEMENT_FEE) đều đã PAID -> Tạo OfflineClass và XÓA ClassRequest
 async function checkAndActivateOfflineClass(classRequestId: string) {
-  const payments = await (prisma as any).offlineClassPayment.findMany({
-    where: { class_request_id: classRequestId },
+  return await (prisma as any).$transaction(async (tx: any) => {
+    const payments = await tx.offlineClassPayment.findMany({
+      where: { class_request_id: classRequestId },
+    });
+
+    const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION' && p.status === 'PAID');
+    const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PAID');
+
+    if (!studentPayment || !tutorPayment) {
+      return null; // Chưa đóng đủ cả 2 khoản
+    }
+
+    // Lấy tutor_id từ thông tin gia sư đã thanh toán hoặc application APPROVED (thực hiện trước khi xóa)
+    const approvedApp = await tx.classApplication.findFirst({
+      where: { class_request_id: classRequestId, status: 'APPROVED' },
+      select: { tutor_id: true },
+    });
+
+    let tutor_id = approvedApp?.tutor_id;
+    if (!tutor_id && tutorPayment.payer_user_id) {
+      const tutorProfile = await tx.tutorProfile.findUnique({
+        where: { user_id: tutorPayment.payer_user_id },
+        select: { tutor_id: true },
+      });
+      tutor_id = tutorProfile?.tutor_id;
+    }
+
+    if (!tutor_id) {
+      throw new Error('Không xác định được Gia sư nhận lớp để khởi tạo OfflineClass.');
+    }
+
+    // Atomic claim via delete-as-lock:
+    let classRequest;
+    try {
+      classRequest = await tx.classRequest.delete({
+        where: { request_id: classRequestId },
+      });
+    } catch (e: any) {
+      if (e.code === 'P2025') return null; // lost the race — another concurrent call already activated this class
+      throw e;
+    }
+
+    const now = new Date();
+    const refundDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // assigned_at + 7 days
+
+    const offlineClass = await tx.offlineClass.create({
+      data: {
+        tutor_id,
+        student_id: classRequest.student_id,
+        class_offline_code: classRequest.class_code,
+        student_name: classRequest.student_name,
+        phone: classRequest.phone,
+        email: classRequest.email,
+        address_detail: classRequest.address_detail,
+        district: classRequest.district,
+        province: classRequest.province,
+        grade_level: classRequest.grade_level,
+        num_students: classRequest.num_students,
+        academic_level: classRequest.academic_level,
+        sessions_per_week: classRequest.sessions_per_week,
+        study_time: classRequest.study_time,
+        class_salary: classRequest.class_salary,
+        commission_rate: 35,
+        status: 'ACTIVE',
+        assigned_at: now,
+        refund_deadline: refundDeadline,
+      },
+    });
+
+    // Gán class_id cho cả 2 dòng OfflineClassPayment
+    await tx.offlineClassPayment.updateMany({
+      where: { payment_id: { in: [studentPayment.payment_id, tutorPayment.payment_id] } },
+      data: { class_id: offlineClass.class_id },
+    });
+
+    return offlineClass;
   });
+}
 
-  const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION' && p.status === 'PAID');
-  const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PAID');
+export async function determineFaultParty(studentPayment: any, tutorPayment: any): Promise<'STUDENT' | 'TUTOR'> {
+  return studentPayment?.status === 'PAID' ? 'TUTOR' : 'STUDENT';
+}
 
-  if (!studentPayment || !tutorPayment) {
-    return null; // Chưa đóng đủ cả 2 khoản
-  }
-
+export async function resolveEscrowExpiration(classRequestId: string, faultPartyOverride?: 'STUDENT' | 'TUTOR') {
   const classRequest = await (prisma as any).classRequest.findUnique({
     where: { request_id: classRequestId },
+    include: { payments: true },
   });
 
   if (!classRequest) return null;
+  if (classRequest.status !== 'WAITING_PAYMENT') return null;
 
-  // Lấy tutor_id từ thông tin gia sư đã thanh toán hoặc application APPROVED
-  const approvedApp = await (prisma as any).classApplication.findFirst({
-    where: { class_request_id: classRequestId, status: 'APPROVED' },
-    select: { tutor_id: true },
-  });
+  const payments = classRequest.payments || [];
+  const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION');
+  const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
 
-  let tutor_id = approvedApp?.tutor_id;
-  if (!tutor_id && tutorPayment.payer_user_id) {
-    const tutorProfile = await (prisma as any).tutorProfile.findUnique({
-      where: { user_id: tutorPayment.payer_user_id },
-      select: { tutor_id: true },
+  const faultParty = (faultPartyOverride === 'STUDENT' || faultPartyOverride === 'TUTOR')
+    ? faultPartyOverride
+    : await determineFaultParty(studentPayment, tutorPayment);
+
+  if (faultParty === 'STUDENT') {
+    if (studentPayment) {
+      await (prisma as any).offlineClassPayment.update({
+        where: { payment_id: studentPayment.payment_id },
+        data: { status: 'EXPIRED' },
+      });
+    }
+    if (tutorPayment && tutorPayment.status === 'PAID') {
+      const refundAmt = Number(tutorPayment.paid_amount);
+      await (prisma as any).offlineClassPayment.update({
+        where: { payment_id: tutorPayment.payment_id },
+        data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
+      });
+      await (prisma as any).wallet.update({
+        where: { user_id: tutorPayment.payer_user_id },
+        data: { balance: { increment: refundAmt } },
+      });
+    }
+
+    const updated = await (prisma as any).classRequest.update({
+      where: { request_id: classRequestId },
+      data: { status: 'EXPIRED' },
     });
-    tutor_id = tutorProfile?.tutor_id;
+
+    return { updated, message: 'Đã xử lý trễ hạn phía Học viên. Lớp chuyển sang EXPIRED đóng vĩnh viễn.', faultParty };
+  } else {
+    if (tutorPayment) {
+      await (prisma as any).offlineClassPayment.update({
+        where: { payment_id: tutorPayment.payment_id },
+        data: { status: 'EXPIRED' },
+      });
+    }
+    if (studentPayment && studentPayment.status === 'PAID') {
+      const refundAmt = Number(studentPayment.paid_amount);
+      await (prisma as any).offlineClassPayment.update({
+        where: { payment_id: studentPayment.payment_id },
+        data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
+      });
+      await (prisma as any).wallet.update({
+        where: { user_id: studentPayment.payer_user_id },
+        data: { balance: { increment: refundAmt } },
+      });
+    }
+
+    await (prisma as any).classApplication.updateMany({
+      where: { class_request_id: classRequestId, status: 'APPROVED' },
+      data: { status: 'EXPIRED' },
+    });
+
+    const updated = await (prisma as any).classRequest.update({
+      where: { request_id: classRequestId },
+      data: { status: 'OPEN', selected_tutor_code: null },
+    });
+
+    return { updated, message: 'Đã xử lý trễ hạn phía Gia sư. Lớp quay lại trạng thái OPEN để tuyển gia sư khác.', faultParty };
   }
-
-  if (!tutor_id) {
-    throw new Error('Không xác định được Gia sư nhận lớp để khởi tạo OfflineClass.');
-  }
-
-  // Khởi tạo OfflineClass ACTIVE và xóa ClassRequest trong 1 transaction
-  const now = new Date();
-  const refundDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // assigned_at + 7 days
-
-  const offlineClass = await (prisma as any).offlineClass.create({
-    data: {
-      tutor_id,
-      student_id: classRequest.student_id,
-      class_offline_code: classRequest.class_code,
-      student_name: classRequest.student_name,
-      phone: classRequest.phone,
-      email: classRequest.email,
-      address_detail: classRequest.address_detail,
-      district: classRequest.district,
-      province: classRequest.province,
-      grade_level: classRequest.grade_level,
-      num_students: classRequest.num_students,
-      academic_level: classRequest.academic_level,
-      sessions_per_week: classRequest.sessions_per_week,
-      study_time: classRequest.study_time,
-      class_salary: classRequest.class_salary,
-      commission_rate: 35,
-      status: 'ACTIVE',
-      assigned_at: now,
-      refund_deadline: refundDeadline,
-    },
-  });
-
-  // Gán class_id cho cả 2 dòng OfflineClassPayment
-  await (prisma as any).offlineClassPayment.updateMany({
-    where: { payment_id: { in: [studentPayment.payment_id, tutorPayment.payment_id] } },
-    data: { class_id: offlineClass.class_id },
-  });
-
-  // Xóa ClassRequest (class_request_id tự động chuyển sang NULL ở OfflineClassPayment nhờ onDelete: SetNull)
-  await (prisma as any).classRequest.delete({
-    where: { request_id: classRequestId },
-  });
-
-  return offlineClass;
 }
 
 export const classRequestController = {
@@ -585,6 +666,7 @@ export const classRequestController = {
           where: { request_id: existingClass.request_id },
           data: {
             status: 'WAITING_PAYMENT',
+            payment_deadline: new Date(Date.now() + env.escrowPaymentDeadlineHours * 60 * 60 * 1000),
             selected_tutor_code: selectedTutorProfile.tutor_code,
           },
         }),
@@ -786,17 +868,18 @@ export const classRequestController = {
 
       const tuitionAmount = Number(paymentRecord.required_amount);
 
-      const studentWallet = await (prisma as any).wallet.upsert({
+      const studentWallet = await (prisma as any).wallet.findUnique({
         where: { user_id: user.user_id },
-        create: { user_id: user.user_id, balance: tuitionAmount },
-        update: {},
       });
+      const currentBalance = studentWallet ? Number(studentWallet.balance) : 0;
 
-      const currentBalance = Number(studentWallet.balance);
       if (currentBalance < tuitionAmount) {
-        await (prisma as any).wallet.update({
-          where: { user_id: user.user_id },
-          data: { balance: { increment: tuitionAmount - currentBalance + 100000 } },
+        return res.status(400).json({
+          error: 'insufficient_balance',
+          message: `Số dư ví không đủ. Cần ${tuitionAmount.toLocaleString('vi-VN')} VNĐ, hiện có ${currentBalance.toLocaleString('vi-VN')} VNĐ.`,
+          balance: currentBalance,
+          tuition_amount: tuitionAmount,
+          shortage: tuitionAmount - currentBalance,
         });
       }
 
@@ -852,75 +935,14 @@ export const classRequestController = {
       const id = String(req.params.id || '').trim();
       const { fault_party } = req.body;
 
-      const classRequest = await (prisma as any).classRequest.findUnique({
-        where: { request_id: id },
-        include: { payments: true },
-      });
+      const override = (fault_party === 'STUDENT' || fault_party === 'TUTOR') ? fault_party : undefined;
+      const result = await resolveEscrowExpiration(id, override);
 
-      if (!classRequest) {
-        return res.status(404).json({ message: 'Không tìm thấy lớp học.' });
+      if (!result) {
+        return res.status(400).json({ message: 'Không thể xử lý trễ hạn (không tìm thấy lớp hoặc lớp không ở trạng thái WAITING_PAYMENT).' });
       }
 
-      const payments = classRequest.payments || [];
-      const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION');
-      const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
-
-      if (fault_party === 'STUDENT') {
-        if (studentPayment) {
-          await (prisma as any).offlineClassPayment.update({
-            where: { payment_id: studentPayment.payment_id },
-            data: { status: 'EXPIRED' },
-          });
-        }
-        if (tutorPayment && tutorPayment.status === 'PAID') {
-          const refundAmt = Number(tutorPayment.paid_amount);
-          await (prisma as any).offlineClassPayment.update({
-            where: { payment_id: tutorPayment.payment_id },
-            data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
-          });
-          await (prisma as any).wallet.update({
-            where: { user_id: tutorPayment.payer_user_id },
-            data: { balance: { increment: refundAmt } },
-          });
-        }
-
-        const updated = await (prisma as any).classRequest.update({
-          where: { request_id: id },
-          data: { status: 'EXPIRED' },
-        });
-
-        return res.json({ message: 'Đã xử lý trễ hạn phía Học viên. Lớp chuyển sang EXPIRED đóng vĩnh viễn.', data: updated });
-      } else {
-        if (tutorPayment) {
-          await (prisma as any).offlineClassPayment.update({
-            where: { payment_id: tutorPayment.payment_id },
-            data: { status: 'EXPIRED' },
-          });
-        }
-        if (studentPayment && studentPayment.status === 'PAID') {
-          const refundAmt = Number(studentPayment.paid_amount);
-          await (prisma as any).offlineClassPayment.update({
-            where: { payment_id: studentPayment.payment_id },
-            data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
-          });
-          await (prisma as any).wallet.update({
-            where: { user_id: studentPayment.payer_user_id },
-            data: { balance: { increment: refundAmt } },
-          });
-        }
-
-        await (prisma as any).classApplication.updateMany({
-          where: { class_request_id: id, status: 'APPROVED' },
-          data: { status: 'EXPIRED' },
-        });
-
-        const updated = await (prisma as any).classRequest.update({
-          where: { request_id: id },
-          data: { status: 'OPEN', selected_tutor_code: null },
-        });
-
-        return res.json({ message: 'Đã xử lý trễ hạn phía Gia sư. Lớp quay lại trạng thái OPEN để tuyển gia sư khác.', data: updated });
-      }
+      return res.json({ message: result.message, data: result.updated });
     } catch (error: any) {
       console.error('Error handling escrow expiration:', error);
       return res.status(500).json({ message: 'Lỗi khi xử lý trễ hạn đóng phí.', error: error.message });
