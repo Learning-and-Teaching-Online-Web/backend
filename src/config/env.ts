@@ -22,4 +22,7 @@ export const env = {
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/auth/google/callback',
+
+    escrowPaymentDeadlineHours: Number(process.env.ESCROW_PAYMENT_DEADLINE_HOURS) || 48,
+    escrowExpirationCheckIntervalMinutes: Number(process.env.ESCROW_EXPIRATION_CHECK_INTERVAL_MINUTES) || 15,
 };
