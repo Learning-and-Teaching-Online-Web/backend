@@ -1396,7 +1396,7 @@ model ClassApplication {
   status          ClassApplicationStatus @default(PENDING)
 
   // 3. Timestamps
-  available_from DateTime? @db.Date // Ngày có thể bắt đầu nhận lớp sớm nhất
+  available_from DateTime? // Ngày giờ có thể bắt đầu nhận lớp sớm nhất
   created_at     DateTime  @default(now()) @db.Timestamptz
   updated_at     DateTime  @default(now()) @db.Timestamptz
 

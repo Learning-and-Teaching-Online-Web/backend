@@ -10,6 +10,7 @@ classRequestRoutes.get('/my-requests', verifyAuth, classRequestController.getMyR
 classRequestRoutes.patch('/my-requests/:id', verifyAuth, classRequestController.updateMyRequest);
 classRequestRoutes.get('/tutor-classes', verifyAuth, classRequestController.getTutorClasses);
 classRequestRoutes.post('/:id/pay-commission', verifyAuth, classRequestController.payCommission);
+classRequestRoutes.post('/:id/cancel-assignment', verifyAuth, classRequestController.cancelTutorAssignment);
 classRequestRoutes.post('/:id/pay-tuition', verifyAuth, classRequestController.payStudentTuition);
 classRequestRoutes.post('/:id/check-expiration', verifyAuth, requireRole('admin'), classRequestController.handleEscrowExpiration);
 

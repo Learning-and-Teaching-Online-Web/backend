@@ -15,13 +15,23 @@ export function mapToGradeLevel(val: any): GradeLevel | null {
   return null;
 }
 
+export function formatGradeLevel(val: any): string {
+  if (!val) return 'Tất cả các lớp';
+  const str = String(val).trim();
+  const match = str.match(/^grade_(\d+)$/i);
+  if (match) {
+    return `Lớp ${match[1]}`;
+  }
+  return str;
+}
+
 function formatClassRequestResponse(cls: any) {
   if (!cls) return cls;
   return {
     ...cls,
     code: cls.class_code || cls.class_offline_code || cls.code || '',
     class_code: cls.class_code || cls.class_offline_code || cls.code || '',
-    grade_level: cls.grade_level || 'Tất cả các lớp',
+    grade_level: formatGradeLevel(cls.grade_level),
     subject_name: cls.subject?.name || cls.subject_name || '',
     desired_price: cls.class_salary ? Number(cls.class_salary) : Number(cls.desired_price || 0),
   };
@@ -419,11 +429,23 @@ export const classRequestController = {
         return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
       }
 
+      const sanitizedApplications = (classRequest.applications || []).map((app: any) => ({
+        ...app,
+        applicant_phone: undefined,
+        tutor: app.tutor
+          ? {
+              tutor_id: app.tutor.tutor_id,
+              full_name: app.tutor.full_name,
+              avatar_url: app.tutor.avatar_url,
+            }
+          : undefined,
+      }));
+
       return res.json({
         data: {
           ...formatClassRequestResponse(classRequest),
           is_active_offline_class: false,
-          applications: classRequest.applications,
+          applications: sanitizedApplications,
           payments: classRequest.payments,
         },
       });
@@ -449,7 +471,7 @@ export const classRequestController = {
       });
 
       if (!classRequest) {
-        return res.status(404).json({ message: 'Lớp học không tồn tại.' });
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
       }
 
       if (classRequest.status !== 'OPEN') {
@@ -469,27 +491,24 @@ export const classRequestController = {
       });
 
       const dateVal = available_from || available_date;
-      const finalPhone = applicant_phone || tutorProfile?.phone || user.email || 'Chưa cập nhật SĐT';
-
-      let validAvailableFrom: Date | null = null;
-      let finalNotes = notes || null;
-
-      if (dateVal) {
-        const parsed = new Date(dateVal);
-        if (!isNaN(parsed.getTime())) {
-          validAvailableFrom = parsed;
-        } else {
-          finalNotes = notes ? `[Thời gian nhận: ${dateVal}] ${notes}` : `[Thời gian nhận: ${dateVal}]`;
-        }
+      if (!dateVal) {
+        return res.status(400).json({ message: 'Vui lòng chọn thời gian có thể nhận lớp hợp lệ.' });
       }
+
+      const parsedDate = new Date(dateVal);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Vui lòng chọn thời gian có thể nhận lớp hợp lệ.' });
+      }
+
+      const finalPhone = applicant_phone || tutorProfile?.phone || user.email || 'Chưa cập nhật SĐT';
 
       const application = await (prisma as any).classApplication.create({
         data: {
           class_request_id: classRequest.request_id,
           tutor_id: tutorProfile?.tutor_id || null,
           applicant_phone: finalPhone,
-          available_from: validAvailableFrom,
-          notes: finalNotes,
+          available_from: parsedDate,
+          notes: notes ? String(notes).trim() : null,
           status: 'PENDING',
         },
       });
@@ -819,6 +838,69 @@ export const classRequestController = {
     } catch (error: any) {
       console.error('Error in payCommission:', error);
       return res.status(500).json({ message: 'Lỗi khi thanh toán phí nhận lớp.', error: error.message });
+    }
+  },
+
+  // 8b. Gia sư hủy nhận lớp khi đang ở trạng thái WAITING_PAYMENT
+  async cancelTutorAssignment(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Gia sư.' });
+      }
+
+      const id = String(req.params.id || '').trim();
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(id);
+
+      const classRequest = await (prisma as any).classRequest.findFirst({
+        where: isUuid
+          ? { OR: [{ request_id: id }, { class_code: id }] }
+          : { class_code: id },
+        include: {
+          applications: true,
+        },
+      });
+
+      if (!classRequest) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+
+      if (classRequest.status !== 'WAITING_PAYMENT') {
+        return res.status(400).json({ message: 'Lớp học hiện không ở trạng thái chờ thanh toán (WAITING_PAYMENT).' });
+      }
+
+      const tutorProfile = await (prisma as any).tutorProfile.findUnique({
+        where: { user_id: user.user_id },
+      });
+
+      if (!tutorProfile) {
+        return res.status(403).json({ message: 'Không tìm thấy hồ sơ Gia sư của bạn.' });
+      }
+
+      const approvedApp = (classRequest.applications || []).find((app: any) => app.status === 'APPROVED');
+      const isAssignedTutor =
+        (approvedApp && approvedApp.tutor_id === tutorProfile.tutor_id) ||
+        (classRequest.selected_tutor_code &&
+          tutorProfile.tutor_code &&
+          classRequest.selected_tutor_code.toLowerCase().includes(tutorProfile.tutor_code.toLowerCase()));
+
+      if (!isAssignedTutor) {
+        return res.status(403).json({ message: 'Bạn không phải gia sư được chọn cho lớp này.' });
+      }
+
+      const result = await resolveEscrowExpiration(classRequest.request_id, 'TUTOR');
+      if (!result) {
+        return res.status(400).json({ message: 'Không thể hủy nhận lớp vào lúc này.' });
+      }
+
+      return res.json({
+        message: 'Đã hủy nhận lớp thành công. Lớp đã được mở lại để các Gia sư khác ứng tuyển.',
+        data: result.updated,
+      });
+    } catch (error: any) {
+      console.error('Error in cancelTutorAssignment:', error);
+      return res.status(500).json({ message: 'Lỗi khi hủy nhận lớp.', error: error.message });
     }
   },
 
