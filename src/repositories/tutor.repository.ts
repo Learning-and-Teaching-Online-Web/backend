@@ -526,11 +526,19 @@ export const tutorRepository = {
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
 =======
     // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades (an toàn, không đụng các dữ liệu khác)
 >>>>>>> f51663f (feat: add schema table comments, grade routes, tutor_grades sync and admin update class request API)
 =======
+=======
+    if (tutor.verified_status === 'rejected') {
+      updatePayload.verified_status = 'pending';
+      updatePayload.admin_note = null;
+    }
+
+>>>>>>> 02b8218 (feat: complete 4-step offline class workflow & tutor direct invitation)
     // Xử lý lưu các khối lớp nhận dạy vào mảng grade_levels (GradeLevel[])
 >>>>>>> a2ced3d (feat: implement repository patterns for tutor and user, add class request and grade controllers, and introduce database utility scripts)
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
@@ -666,6 +674,12 @@ export const tutorRepository = {
         expiry_date: data.expiry_date ? new Date(data.expiry_date) : null,
         status: 'pending'
       }
+    });
+
+    // Reset profile status to pending if previously rejected when adding a new certificate
+    await prisma.tutorProfile.updateMany({
+      where: { tutor_id: tutorId, verified_status: 'rejected' },
+      data: { verified_status: 'pending', admin_note: null }
     });
 
     return cert;
