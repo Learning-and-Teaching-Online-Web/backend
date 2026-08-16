@@ -12,7 +12,7 @@ export const bookingService = {
       throw new Error('Tài khoản Quản trị viên (Admin) không thể đăng ký khóa học');
     }
     if (user.role === 'tutor') {
-      throw new Error('Tài khoản Giảng viên không thể đăng ký khóa học. Vui lòng sử dụng tài khoản Học viên');
+      throw new Error('Tài khoản Gia sư không thể đăng ký khóa học. Vui lòng sử dụng tài khoản Học viên');
     }
 
     // 1. Get or create student profile
@@ -178,7 +178,7 @@ export const bookingService = {
         transaction_id: tx.transaction_id,
         type: isExpense ? 'expense' : 'deposit',
         amount: Number(tx.amount),
-        status: tx.status === 'success' ? 'success' : tx.status === 'pending' ? 'pending' : 'failed',
+        status: (tx.status === 'success' || tx.status === 'refunded') ? tx.status : tx.status === 'pending' ? 'pending' : 'failed',
         description: tx.description || 'Nạp tiền vào tài khoản',
         created_at: tx.created_at
       };

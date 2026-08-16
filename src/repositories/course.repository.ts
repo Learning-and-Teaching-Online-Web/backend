@@ -5,7 +5,7 @@ function formatCourseUser(course: any) {
   if (course.tutor) {
     const displayName = (course.tutor.full_name && course.tutor.full_name !== 'Người dùng')
       ? course.tutor.full_name
-      : (course.tutor.user?.email ? course.tutor.user.email.split('@')[0] : 'Giảng viên');
+      : (course.tutor.user?.email ? course.tutor.user.email.split('@')[0] : 'Gia sư');
     course.tutor.full_name = displayName;
     if (course.tutor.user) {
       course.tutor.user.full_name = displayName;
@@ -89,7 +89,7 @@ export const courseRepository = {
       ];
     }
 
-    const [data, count] = await (prisma as any).$transaction([
+    const [data, count] = await Promise.all([
       (prisma.course as any).findMany({
         where: whereClause,
         include: {

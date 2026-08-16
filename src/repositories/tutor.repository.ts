@@ -19,7 +19,7 @@ function mapGradeIdsToEnums(ids: any[]): GradeLevel[] {
 function formatTutorUser(tutor: any) {
   if (!tutor) return tutor;
   const rawName = tutor.full_name;
-  const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (tutor.user?.email ? tutor.user.email.split('@')[0] : 'Giảng viên');
+  const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (tutor.user?.email ? tutor.user.email.split('@')[0] : 'Gia sư');
   tutor.full_name = displayName;
   if (tutor.user) {
     tutor.user.full_name = displayName;
@@ -358,7 +358,7 @@ export const tutorRepository = {
           transaction_id: tx.transaction_id,
           type: (isExpense ? 'expense' : 'earning') as any,
           amount: Number(tx.amount),
-          status: tx.status === 'success' ? ('success' as const) : tx.status === 'pending' ? ('pending' as const) : ('failed' as const),
+          status: (tx.status === 'success' || tx.status === 'refunded') ? (tx.status as any) : tx.status === 'pending' ? ('pending' as const) : ('failed' as const),
           description: tx.description || 'Học phí nhận từ học sinh',
           created_at: tx.created_at
         };

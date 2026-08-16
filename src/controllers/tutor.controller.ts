@@ -5,7 +5,7 @@ import { tutorService } from '../services/tutor.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export const tutorController = {
-  // GET /tutors - Lấy tất cả giảng viên
+  // GET /tutors - Lấy tất cả gia sư
   async getAll(req: Request, res: Response) {
     try {
       const tutors = await tutorRepository.findAll();
@@ -26,11 +26,11 @@ export const tutorController = {
         const bookingMap = bookings || [];
 
         tutors.forEach((tutor: any) => {
-          // Đếm số khóa học của giảng viên này
+          // Đếm số khóa học của gia sư này
           const tutorCourses = courseMap.filter((c: any) => c.tutor_id === tutor.tutor_id);
           tutor.total_courses = tutorCourses.length;
 
-          // Danh sách các course_id của giảng viên này
+          // Danh sách các course_id của gia sư này
           const tutorCourseIds = new Set(tutorCourses.map((c: any) => c.course_id));
 
           // Đọc danh sách học viên đăng ký các khóa học này
@@ -48,7 +48,7 @@ export const tutorController = {
     }
   },
 
-  // GET /tutors/:tutorId - Lấy chi tiết một giảng viên
+  // GET /tutors/:tutorId - Lấy chi tiết một gia sư
   async getById(req: Request, res: Response) {
     try {
       const tutorId = req.params.tutorId as string;
@@ -57,7 +57,7 @@ export const tutorController = {
         return res.status(404).json({ success: false, error: 'Tutor not found' });
       }
 
-      // Đếm khóa học của giảng viên này
+      // Đếm khóa học của gia sư này
       const courses = await prisma.course.findMany({
         where: { tutor_id: tutorId },
         select: { course_id: true }

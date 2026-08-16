@@ -47,7 +47,7 @@ export const documentController = {
 
       const tutor = await tutorRepository.findByUserId(userId);
       if (!tutor) {
-        res.status(403).json({ success: false, error: 'Chỉ giảng viên mới có quyền đăng bài học' });
+        res.status(403).json({ success: false, error: 'Chỉ gia sư mới có quyền đăng bài học' });
         return;
       }
 

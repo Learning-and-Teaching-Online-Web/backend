@@ -20,7 +20,7 @@ export const favoriteController = {
       }
 
       if (!tutorId) {
-        res.status(400).json({ success: false, error: 'Thiếu thông tin ID giảng viên' });
+        res.status(400).json({ success: false, error: 'Thiếu thông tin ID gia sư' });
         return;
       }
 

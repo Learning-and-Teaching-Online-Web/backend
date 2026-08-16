@@ -1277,7 +1277,7 @@ enum RefundTicketStatus {
 
 // ================================================================
 // BẢNG: class_requests
-// Mô tả: Quản lý các đơn đăng ký / bài đăng tìm gia sư dạy kèm Offline của Phụ huynh / Học viên.
+// Mô tả: Quản lý các đơn đăng ký / bài đăng tìm gia sư dạy kèm Offline của Học viên.
 // Luồng: Học viên tạo bài (PENDING_ADMIN/WAITING_TUTOR_CONFIRM) -> Admin duyệt mở lớp (OPEN) -> Gia sư ứng tuyển -> Admin duyệt & gia sư đóng phí -> Chuyển sang bảng offline_classes (đồng thời XÓA record trong class_requests này).
 // Tương tự: "Giỏ hàng" chờ thanh toán.
 // ================================================================
@@ -1290,7 +1290,7 @@ model ClassRequest {
 
   // 2. Code & Student Info
   class_code     String? @unique // Mã lớp học hiển thị (VD: MS: 89513)
-  student_name   String // Họ tên học viên / phụ huynh
+  student_name   String // Họ tên học viên
   phone          String // Số điện thoại liên hệ
   email          String? // Email liên hệ
   address_detail String // Địa chỉ chi tiết (VD: tỉnh lộ 43 - Bình Chiểu)
@@ -1343,7 +1343,7 @@ model OfflineClass {
 
   // 2. Snapshot thông tin lớp học (copy từ ClassRequest tại thời điểm giao)
   class_offline_code String? // Mã lớp gốc (copy từ ClassRequest.class_code)
-  student_name       String // Họ tên học viên / phụ huynh
+  student_name       String // Họ tên học viên
   phone              String // Số điện thoại liên hệ
   email              String? // Email liên hệ
   address_detail     String // Địa chỉ chi tiết

@@ -40,8 +40,11 @@ function formatClassRequestResponse(cls: any) {
 
 function formatOfflineClassResponse(cls: any, extraSubjectName?: string) {
   if (!cls) return cls;
+  const refundTickets = cls.refund_tickets || [];
+  const hasPendingRefund = refundTickets.some((t: any) => t.status === 'PENDING');
   return {
     request_id: cls.class_id,
+    class_id: cls.class_id,
     record_type: 'offline_class',
     code: cls.class_offline_code || '',
     class_code: cls.class_offline_code || '',
@@ -63,7 +66,9 @@ function formatOfflineClassResponse(cls: any, extraSubjectName?: string) {
     status: cls.status,
     assigned_tutor: cls.tutor ? { full_name: cls.tutor.full_name, phone: cls.tutor.phone } : undefined,
     created_at: cls.created_at || cls.assigned_at,
-    _count: undefined,
+    refund_deadline: cls.refund_deadline,
+    refund_tickets: refundTickets,
+    has_pending_refund: hasPendingRefund,
   };
 }
 
@@ -99,6 +104,15 @@ async function checkAndActivateOfflineClass(classRequestId: string) {
     if (!tutor_id) {
       throw new Error('Không xác định được Gia sư nhận lớp để khởi tạo OfflineClass.');
     }
+
+    // Chuyển tất cả đơn ứng tuyển còn PENDING sang REJECTED khi lớp được kích hoạt thành công
+    await tx.classApplication.updateMany({
+      where: {
+        class_request_id: classRequestId,
+        status: 'PENDING',
+      },
+      data: { status: 'REJECTED' },
+    });
 
     // Atomic claim via delete-as-lock:
     let classRequest;
@@ -616,6 +630,7 @@ export const classRequestController = {
             orderBy: { created_at: 'desc' },
             include: {
               tutor: { select: { full_name: true, phone: true } },
+              refund_tickets: true,
             },
           }),
         ]);
@@ -724,6 +739,7 @@ export const classRequestController = {
           orderBy: { created_at: 'desc' },
           include: {
             tutor: { select: { full_name: true, phone: true } },
+            refund_tickets: true,
           },
         }),
       ]);
@@ -1042,6 +1058,8 @@ export const classRequestController = {
       }
 
       let selectedTutorProfile: any = null;
+      let targetApplicationId: string | null = application_id || null;
+
       if (tutor_id) {
         selectedTutorProfile = await (prisma as any).tutorProfile.findUnique({ where: { tutor_id } });
       } else if (tutor_code) {
@@ -1055,6 +1073,18 @@ export const classRequestController = {
 
       if (!selectedTutorProfile) {
         return res.status(400).json({ message: 'Vui lòng chọn thông tin Gia sư hợp lệ để giao lớp.' });
+      }
+
+      if (!targetApplicationId && selectedTutorProfile) {
+        const existingApp = await (prisma as any).classApplication.findFirst({
+          where: {
+            class_request_id: existingClass.request_id,
+            tutor_id: selectedTutorProfile.tutor_id,
+          },
+        });
+        if (existingApp) {
+          targetApplicationId = existingApp.application_id;
+        }
       }
 
       let studentUserId = existingClass.student?.user_id || null;
@@ -1090,18 +1120,19 @@ export const classRequestController = {
             selected_tutor_code: selectedTutorProfile.tutor_code,
           },
         }),
-        ...(application_id
+        // Expire any stale pending escrow payments for this class request before creating new ones
+        (prisma as any).offlineClassPayment.updateMany({
+          where: {
+            class_request_id: existingClass.request_id,
+            status: 'PENDING',
+          },
+          data: { status: 'EXPIRED' },
+        }),
+        ...(targetApplicationId
           ? [
               (prisma as any).classApplication.update({
-                where: { application_id },
+                where: { application_id: targetApplicationId },
                 data: { status: 'APPROVED' },
-              }),
-              (prisma as any).classApplication.updateMany({
-                where: {
-                  class_request_id: existingClass.request_id,
-                  application_id: { not: application_id },
-                },
-                data: { status: 'REJECTED' },
               }),
             ]
           : []),
@@ -1637,7 +1668,7 @@ export const classRequestController = {
         );
 
         const payments = cls.payments || [];
-        const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
+        const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PAID') || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PENDING') || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
 
         return {
           ...formatClassRequestResponse(cls),
@@ -1653,12 +1684,12 @@ export const classRequestController = {
       });
 
       const formattedOfflineClasses = offlineClasses.map((cls: any) => ({
-        ...formatClassRequestResponse(cls),
+        ...formatOfflineClassResponse(cls),
         is_active_offline_class: true,
         is_directed_to_me: true,
         is_assigned_to_me: true,
         payments: cls.payments,
-        refund_tickets: cls.refund_tickets,
+        refund_tickets: cls.refund_tickets || [],
       }));
 
       return res.json({ data: [...formattedRequests, ...formattedOfflineClasses] });

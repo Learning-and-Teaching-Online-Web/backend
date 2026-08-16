@@ -3,9 +3,9 @@
 ## 1. Giới thiệu tổng quan
 
 Module **Gia sư Offline & Bảng giá tham khảo** quản lý tính năng tìm và chọn gia sư dạy trực tiếp tại nhà/trung tâm:
-- **Yêu cầu mở lớp (ClassRequest):** Phụ huynh/Học viên đăng yêu cầu tìm gia sư offline (lớp, môn, số buổi/tuần, địa chỉ, mức lương mong muốn, yêu cầu gia sư). Admin tiếp nhận, kiểm tra và duyệt mở lớp.
+- **Yêu cầu mở lớp (ClassRequest):** Học viên đăng yêu cầu tìm gia sư offline (lớp, môn, số buổi/tuần, địa chỉ, mức lương mong muốn, yêu cầu gia sư). Admin tiếp nhận, kiểm tra và duyệt mở lớp.
 - **Ứng tuyển nhận lớp (ClassApplication):** Gia sư đăng ký ứng tuyển nhanh cho các lớp offline đang mở (`OPEN`). Admin duyệt và chọn gia sư phù hợp.
-- **Bảng giá tham khảo (ReferencePrice):** Lưu trữ bảng giá mức lương gia sư tham khảo theo khối lớp và số buổi/tuần, giúp phụ huynh và gia sư có căn cứ tham chiếu mức học phí hợp lý.
+- **Bảng giá tham khảo (ReferencePrice):** Lưu trữ bảng giá mức lương gia sư tham khảo theo khối lớp và số buổi/tuần, giúp học viên và gia sư có căn cứ tham chiếu mức học phí hợp lý.
 
 ---
 
@@ -92,7 +92,7 @@ Module **Gia sư Offline & Bảng giá tham khảo** quản lý tính năng tìm
 | `request_id` | `String` (UUID) | `@id`, `gen_random_uuid()` | Khóa chính duy nhất định danh yêu cầu. |
 | `code` | `String?` | `@unique` | Mã lớp học hiển thị (VD: `"MS: 89513"`). |
 | `student_id` | `String?` | `@db.Uuid`, Khóa ngoại -> `student_profiles` | Liên kết tới hồ sơ học sinh (nếu đã đăng nhập). |
-| `student_name` | `String` | Bắt buộc | Họ tên học viên / phụ huynh liên hệ. |
+| `student_name` | `String` | Bắt buộc | Họ tên học viên liên hệ. |
 | `phone` | `String` | Bắt buộc | Số điện thoại liên hệ. |
 | `email` | `String?` | Tùy chọn | Email liên hệ. |
 | `address_detail` | `String` | Bắt buộc | Địa chỉ chi tiết (VD: "Số 123 Đường Tỉnh Lộ 43, Phường Bình Chiểu"). |

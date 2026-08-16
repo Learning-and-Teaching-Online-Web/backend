@@ -43,7 +43,7 @@ async function seedOfflineData() {
   const sampleClasses = [
     {
       code: '89513',
-      student_name: 'Phụ huynh em Nam',
+      student_name: 'Học viên Nguyễn Văn Nam',
       phone: '0974502420',
       address_detail: 'tỉnh lộ 43 - Bình Chiểu',
       district: 'Q.Thủ Đức',
@@ -60,7 +60,7 @@ async function seedOfflineData() {
     },
     {
       code: '89507',
-      student_name: 'Phụ huynh em Lan',
+      student_name: 'Học viên Trần Thị Lan',
       phone: '0938708488',
       address_detail: 'Tân Kỳ Tân Quý',
       district: 'Q.Tân Phú',
@@ -77,7 +77,7 @@ async function seedOfflineData() {
     },
     {
       code: '89511',
-      student_name: 'Phụ huynh em Minh',
+      student_name: 'Học viên Lê Văn Minh',
       phone: '0912345678',
       address_detail: 'Trần Tấn',
       district: 'Q.Thanh Khê',
@@ -94,7 +94,7 @@ async function seedOfflineData() {
     },
     {
       code: '89510',
-      student_name: 'Phụ huynh em Đức',
+      student_name: 'Học viên Phạm Minh Đức',
       phone: '0987654321',
       address_detail: 'Lê Đức Thọ - P 15',
       district: 'Q.Gò Vấp',
