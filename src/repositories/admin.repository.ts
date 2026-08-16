@@ -114,7 +114,7 @@ export const adminRepository = {
       ];
     }
 
-    const [users, total] = await prisma.$transaction([
+    const [users, total] = await Promise.all([
       prisma.user.findMany({
         where: whereClause,
         include: {
@@ -184,7 +184,7 @@ export const adminRepository = {
       whereClause.verified_status = filters.verifiedStatus as VerificationStatus;
     }
 
-    const [tutors, total] = await prisma.$transaction([
+    const [tutors, total] = await Promise.all([
       prisma.tutorProfile.findMany({
         where: whereClause,
         include: {
@@ -273,7 +273,7 @@ export const adminRepository = {
       ];
     }
 
-    const [courses, total] = await prisma.$transaction([
+    const [courses, total] = await Promise.all([
       prisma.course.findMany({
         where: whereClause,
         include: {
@@ -321,7 +321,7 @@ export const adminRepository = {
     const limit = filters.limit || 10;
     const skip = (page - 1) * limit;
 
-    const [transactions, total] = await prisma.$transaction([
+    const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
         include: {
           user: {
@@ -370,7 +370,7 @@ export const adminRepository = {
       whereClause.status = filters.status as PayoutStatus;
     }
 
-    const [payouts, total] = await prisma.$transaction([
+    const [payouts, total] = await Promise.all([
       prisma.payout.findMany({
         where: whereClause,
         include: {

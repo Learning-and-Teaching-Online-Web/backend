@@ -11,14 +11,19 @@ export const refundTicketController = {
       }
 
       const classId = String(req.params.classId || '').trim();
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(classId);
+
       const { reason } = req.body;
 
       if (!reason || !String(reason).trim()) {
         return res.status(400).json({ message: 'Vui lòng điền lý do yêu cầu hủy lớp / hoàn tiền.' });
       }
 
-      const offlineClass = await (prisma as any).offlineClass.findUnique({
-        where: { class_id: classId },
+      const offlineClass = await (prisma as any).offlineClass.findFirst({
+        where: isUuid
+          ? { OR: [{ class_id: classId }, { class_offline_code: classId }] }
+          : { class_offline_code: classId },
         include: {
           payments: true,
           refund_tickets: {
@@ -211,8 +216,16 @@ export const refundTicketController = {
       }
 
       const offlineClass = ticket.offline_class || {};
-      const studentUserId = offlineClass.student?.user_id;
-      const tutorUserId = offlineClass.tutor?.user_id;
+      let studentUserId = offlineClass.student?.user_id || null;
+      let tutorUserId = offlineClass.tutor?.user_id || null;
+
+      if (!studentUserId && offlineClass.email) {
+        const u = await (prisma as any).user.findFirst({
+          where: { email: { equals: offlineClass.email, mode: 'insensitive' } },
+          select: { user_id: true },
+        });
+        studentUserId = u?.user_id || null;
+      }
 
       const payments = offlineClass.payments || [];
       const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION');

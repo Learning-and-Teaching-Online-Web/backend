@@ -66,7 +66,7 @@ Module 1 bao gồm 3 bảng chính:
 ### 3.1. `UserRole` (Phân quyền người dùng)
 * **Mục đích:** Xác định vai trò của người dùng trong hệ thống để thực hiện phân quyền (RBAC - Role-Based Access Control).
 * **Các giá trị:**
-  * `student`: Học sinh / Phụ huynh (Có quyền tìm kiếm gia sư, đăng ký khóa học, đặt lịch, làm bài kiểm tra, bình luận, chat).
+  * `student`: Học sinh / Học viên (Có quyền tìm kiếm gia sư, đăng ký khóa học, đặt lịch, làm bài kiểm tra, bình luận, chat).
   * `tutor`: Gia sư (Có quyền tạo khóa học, quản lý lịch dạy, điểm danh, tạo quiz, nhận tiền rút về ngân hàng).
   * `admin`: Quản trị viên (Có quyền duyệt hồ sơ gia sư, duyệt bằng cấp, quản lý cấu hình hệ thống, xem log hoạt động).
 
