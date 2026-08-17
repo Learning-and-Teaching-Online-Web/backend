@@ -78,7 +78,14 @@ export const refundTicketController = {
         include: {
           offline_class: true,
           requester: {
-            select: { email: true, role: true },
+            select: {
+              user_id: true,
+              email: true,
+              role: true,
+              student_profile: { select: { full_name: true, phone: true } },
+              tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+              admin_profile: { select: { full_name: true, phone: true } },
+            },
           },
         },
       });
@@ -126,7 +133,16 @@ export const refundTicketController = {
               student: { select: { full_name: true, phone: true } },
             },
           },
-          requester: { select: { email: true, role: true } },
+          requester: {
+            select: {
+              user_id: true,
+              email: true,
+              role: true,
+              student_profile: { select: { full_name: true, phone: true } },
+              tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+              admin_profile: { select: { full_name: true, phone: true } },
+            },
+          },
           processed_admin: { select: { email: true } },
         },
       });
