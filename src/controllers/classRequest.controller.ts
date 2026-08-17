@@ -25,8 +25,56 @@ export function formatGradeLevel(val: any): string {
   return str;
 }
 
-function formatClassRequestResponse(cls: any) {
+async function buildSelectedTutorMap(items: any[]): Promise<Map<string, any>> {
+  const codes = new Set<string>();
+  items.forEach((item) => {
+    if (item && item.selected_tutor_code) {
+      codes.add(String(item.selected_tutor_code).trim().toLowerCase());
+    }
+  });
+
+  const tutorMap = new Map<string, any>();
+  if (codes.size === 0) return tutorMap;
+
+  try {
+    const tutors = await (prisma as any).tutorProfile.findMany({
+      where: {
+        tutor_code: { in: Array.from(codes), mode: 'insensitive' },
+      },
+      select: {
+        tutor_id: true,
+        tutor_code: true,
+        full_name: true,
+        phone: true,
+        avatar_url: true,
+      },
+    });
+
+    tutors.forEach((t: any) => {
+      if (t.tutor_code) {
+        tutorMap.set(String(t.tutor_code).trim().toLowerCase(), {
+          tutor_id: t.tutor_id,
+          tutor_code: t.tutor_code,
+          full_name: t.full_name,
+          phone: t.phone,
+          avatar_url: t.avatar_url,
+        });
+      }
+    });
+  } catch (err) {
+    console.error('Error building selected tutor map:', err);
+  }
+
+  return tutorMap;
+}
+
+function formatClassRequestResponse(cls: any, extraTutorMap?: Map<string, any>) {
   if (!cls) return cls;
+  const selCode = cls.selected_tutor_code ? String(cls.selected_tutor_code).trim() : null;
+  let selectedTutor = cls.selected_tutor || null;
+  if (!selectedTutor && selCode && extraTutorMap) {
+    selectedTutor = extraTutorMap.get(selCode.toLowerCase()) || null;
+  }
   return {
     ...cls,
     record_type: 'class_request',
@@ -35,6 +83,8 @@ function formatClassRequestResponse(cls: any) {
     grade_level: formatGradeLevel(cls.grade_level),
     subject_name: cls.subject?.name || cls.subject_name || '',
     desired_price: cls.class_salary ? Number(cls.class_salary) : Number(cls.desired_price || 0),
+    selected_tutor_code: selCode,
+    selected_tutor: selectedTutor,
   };
 }
 
@@ -192,15 +242,39 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
       });
     }
     if (tutorPayment && tutorPayment.status === 'PAID') {
-      const refundAmt = Number(tutorPayment.paid_amount);
+      const refundAmt = Number(tutorPayment.paid_amount || tutorPayment.required_amount || 0);
+      let tutorUserId = tutorPayment.payer_user_id;
+      if (!tutorUserId) {
+        const approvedApp = await (prisma as any).classApplication.findFirst({
+          where: { class_request_id: classRequestId, status: 'APPROVED' },
+          include: { tutor: { select: { user_id: true } } },
+        });
+        tutorUserId = approvedApp?.tutor?.user_id || null;
+      }
+
       await (prisma as any).offlineClassPayment.update({
         where: { payment_id: tutorPayment.payment_id },
         data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
       });
-      await (prisma as any).wallet.update({
-        where: { user_id: tutorPayment.payer_user_id },
-        data: { balance: { increment: refundAmt } },
-      });
+
+      if (tutorUserId) {
+        await (prisma as any).wallet.upsert({
+          where: { user_id: tutorUserId },
+          update: { balance: { increment: refundAmt }, updated_at: new Date() },
+          create: { user_id: tutorUserId, balance: refundAmt, currency: 'VND' },
+        });
+
+        await (prisma as any).transaction.create({
+          data: {
+            user_id: tutorUserId,
+            amount: refundAmt,
+            payment_method: 'wallet',
+            description: `Hoàn tiền 100% phí nhận lớp escrow MS:${classRequest.class_code || classRequestId.slice(0, 8)} do Học viên trễ hạn nộp học phí`,
+            status: 'success',
+            paid_at: new Date(),
+          },
+        });
+      }
     }
 
     const updated = await (prisma as any).classRequest.update({
@@ -216,16 +290,51 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
         data: { status: 'EXPIRED' },
       });
     }
+
     if (studentPayment && studentPayment.status === 'PAID') {
-      const refundAmt = Number(studentPayment.paid_amount);
+      const refundAmt = Number(studentPayment.paid_amount || studentPayment.required_amount || 0);
+
+      let studentUserId = studentPayment.payer_user_id;
+      if (!studentUserId) {
+        if (classRequest.student_id) {
+          const sp = await (prisma as any).studentProfile.findUnique({
+            where: { student_id: classRequest.student_id },
+            select: { user_id: true },
+          });
+          studentUserId = sp?.user_id || null;
+        }
+        if (!studentUserId && classRequest.email) {
+          const u = await (prisma as any).user.findFirst({
+            where: { email: { equals: classRequest.email, mode: 'insensitive' } },
+            select: { user_id: true },
+          });
+          studentUserId = u?.user_id || null;
+        }
+      }
+
       await (prisma as any).offlineClassPayment.update({
         where: { payment_id: studentPayment.payment_id },
         data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
       });
-      await (prisma as any).wallet.update({
-        where: { user_id: studentPayment.payer_user_id },
-        data: { balance: { increment: refundAmt } },
-      });
+
+      if (studentUserId) {
+        await (prisma as any).wallet.upsert({
+          where: { user_id: studentUserId },
+          update: { balance: { increment: refundAmt }, updated_at: new Date() },
+          create: { user_id: studentUserId, balance: refundAmt, currency: 'VND' },
+        });
+
+        await (prisma as any).transaction.create({
+          data: {
+            user_id: studentUserId,
+            amount: refundAmt,
+            payment_method: 'wallet',
+            description: `Hoàn tiền 100% học phí tháng đầu escrow MS:${classRequest.class_code || classRequestId.slice(0, 8)} do Gia sư từ chối/hủy nhận lớp`,
+            status: 'success',
+            paid_at: new Date(),
+          },
+        });
+      }
     }
 
     await (prisma as any).classApplication.updateMany({
@@ -238,7 +347,7 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
       data: { status: 'OPEN', selected_tutor_code: null },
     });
 
-    return { updated, message: 'Đã xử lý trễ hạn phía Gia sư. Lớp quay lại trạng thái OPEN để tuyển gia sư khác.', faultParty };
+    return { updated, message: 'Đã xử lý hủy/trễ hạn phía Gia sư. Lớp quay lại trạng thái OPEN và đã hoàn 100% tiền học phí về ví Học viên.', faultParty };
   }
 }
 
@@ -457,7 +566,20 @@ export const classRequestController = {
             tutor: { select: { tutor_id: true, full_name: true, phone: true, avatar_url: true } },
             student: { select: { student_id: true, full_name: true, phone: true } },
             payments: true,
-            refund_tickets: true,
+            refund_tickets: {
+              include: {
+                requester: {
+                  select: {
+                    user_id: true,
+                    email: true,
+                    role: true,
+                    student_profile: { select: { full_name: true, phone: true } },
+                    tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+                    admin_profile: { select: { full_name: true, phone: true } },
+                  },
+                },
+              },
+            },
           },
         });
 
@@ -506,9 +628,11 @@ export const classRequestController = {
           : undefined,
       }));
 
+      const selTutorMap = await buildSelectedTutorMap([classRequest]);
+
       return res.json({
         data: {
-          ...formatClassRequestResponse(classRequest),
+          ...formatClassRequestResponse(classRequest, selTutorMap),
           is_active_offline_class: false,
           applications: sanitizedApplications,
           payments: classRequest.payments,
@@ -630,7 +754,20 @@ export const classRequestController = {
             orderBy: { created_at: 'desc' },
             include: {
               tutor: { select: { full_name: true, phone: true } },
-              refund_tickets: true,
+              refund_tickets: {
+              include: {
+                requester: {
+                  select: {
+                    user_id: true,
+                    email: true,
+                    role: true,
+                    student_profile: { select: { full_name: true, phone: true } },
+                    tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+                    admin_profile: { select: { full_name: true, phone: true } },
+                  },
+                },
+              },
+            },
             },
           }),
         ]);
@@ -681,7 +818,8 @@ export const classRequestController = {
           }),
         ]);
 
-        const formattedItems = items.map((cls: any) => formatClassRequestResponse(cls));
+        const selTutorMap = await buildSelectedTutorMap(items);
+        const formattedItems = items.map((cls: any) => formatClassRequestResponse(cls, selTutorMap));
 
         return res.json({
           total,
@@ -739,7 +877,20 @@ export const classRequestController = {
           orderBy: { created_at: 'desc' },
           include: {
             tutor: { select: { full_name: true, phone: true } },
-            refund_tickets: true,
+            refund_tickets: {
+              include: {
+                requester: {
+                  select: {
+                    user_id: true,
+                    email: true,
+                    role: true,
+                    student_profile: { select: { full_name: true, phone: true } },
+                    tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+                    admin_profile: { select: { full_name: true, phone: true } },
+                  },
+                },
+              },
+            },
           },
         }),
       ]);
@@ -750,7 +901,8 @@ export const classRequestController = {
         : [];
       const ocSubMap = new Map(ocSubs.map((s: any) => [s.subject_id, s.name]));
 
-      const formattedCr = crItems.map((cls: any) => formatClassRequestResponse(cls));
+      const crTutorMap = await buildSelectedTutorMap(crItems);
+      const formattedCr = crItems.map((cls: any) => formatClassRequestResponse(cls, crTutorMap));
       const formattedOc = ocItems.map((cls: any) => formatOfflineClassResponse(cls, cls.subject_id ? (ocSubMap.get(cls.subject_id) as string) : undefined));
 
       const merged = [...formattedCr, ...formattedOc].sort((a: any, b: any) => {
@@ -801,12 +953,7 @@ export const classRequestController = {
       let targetTutor: any = null;
       if (selCode) {
         targetTutor = await (prisma as any).tutorProfile.findFirst({
-          where: {
-            OR: [
-              { tutor_code: { equals: selCode, mode: 'insensitive' } },
-              { phone: { equals: selCode, mode: 'insensitive' } },
-            ],
-          },
+          where: { tutor_code: { equals: selCode, mode: 'insensitive' } },
         });
       }
 
@@ -933,6 +1080,14 @@ export const classRequestController = {
       }
 
       if (action === 'DECLINE') {
+        if (classRequest.status === 'WAITING_PAYMENT') {
+          const resEscrow = await resolveEscrowExpiration(classRequest.request_id, 'TUTOR');
+          return res.json({
+            message: 'Bạn đã từ chối nhận lớp chỉ định. Hệ thống đã hoàn 100% học phí về ví Học viên và chuyển bài đăng sang công khai (OPEN).',
+            data: formatClassRequestResponse(resEscrow?.updated || classRequest),
+          });
+        }
+
         const updated = await (prisma as any).classRequest.update({
           where: { request_id: classRequest.request_id },
           data: {
@@ -997,7 +1152,7 @@ export const classRequestController = {
           where: { request_id: classRequest.request_id },
           data: {
             status: 'WAITING_PAYMENT',
-            payment_deadline: new Date(Date.now() + env.escrowPaymentDeadlineHours * 60 * 60 * 1000),
+            payment_deadline: new Date(Date.now() + env.escrowPaymentDeadlineMinutes * 60 * 1000),
             selected_tutor_code: tutorProfile.tutor_code,
           },
         }),
@@ -1116,7 +1271,7 @@ export const classRequestController = {
           where: { request_id: existingClass.request_id },
           data: {
             status: 'WAITING_PAYMENT',
-            payment_deadline: new Date(Date.now() + env.escrowPaymentDeadlineHours * 60 * 60 * 1000),
+            payment_deadline: new Date(Date.now() + env.escrowPaymentDeadlineMinutes * 60 * 1000),
             selected_tutor_code: selectedTutorProfile.tutor_code,
           },
         }),
@@ -1515,13 +1670,27 @@ export const classRequestController = {
             include: {
               tutor: { select: { full_name: true, phone: true, avatar_url: true } },
               payments: true,
-              refund_tickets: true,
+              refund_tickets: {
+              include: {
+                requester: {
+                  select: {
+                    user_id: true,
+                    email: true,
+                    role: true,
+                    student_profile: { select: { full_name: true, phone: true } },
+                    tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+                    admin_profile: { select: { full_name: true, phone: true } },
+                  },
+                },
+              },
+            },
             },
           })
         : [];
 
+      const studentTutorMap = await buildSelectedTutorMap(requests);
       const formattedRequests = requests.map((cls: any) => ({
-        ...formatClassRequestResponse(cls),
+        ...formatClassRequestResponse(cls, studentTutorMap),
         is_active_offline_class: false,
       }));
 
@@ -1654,7 +1823,20 @@ export const classRequestController = {
           orderBy: { created_at: 'desc' },
           include: {
             payments: true,
-            refund_tickets: true,
+            refund_tickets: {
+              include: {
+                requester: {
+                  select: {
+                    user_id: true,
+                    email: true,
+                    role: true,
+                    student_profile: { select: { full_name: true, phone: true } },
+                    tutor_profile: { select: { full_name: true, phone: true, tutor_code: true } },
+                    admin_profile: { select: { full_name: true, phone: true } },
+                  },
+                },
+              },
+            },
           },
         }),
       ]);
