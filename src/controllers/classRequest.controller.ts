@@ -489,11 +489,16 @@ export const classRequestController = {
 
       if (search) {
         const searchStr = String(search).trim();
+        const searchGradeEnum = mapToGradeLevel(searchStr);
+
         where.OR = [
           { class_code: { contains: searchStr, mode: 'insensitive' } },
           { address_detail: { contains: searchStr, mode: 'insensitive' } },
           { district: { contains: searchStr, mode: 'insensitive' } },
+          { province: { contains: searchStr, mode: 'insensitive' } },
+          { student_name: { contains: searchStr, mode: 'insensitive' } },
           { subject: { name: { contains: searchStr, mode: 'insensitive' } } },
+          ...(searchGradeEnum ? [{ grade_level: searchGradeEnum }] : []),
         ];
       }
 
@@ -793,13 +798,16 @@ export const classRequestController = {
       if (statusStr !== 'all') {
         const classRequestWhere: any = { status: statusStr };
         if (searchStr) {
+          const searchGradeEnum = mapToGradeLevel(searchStr);
           classRequestWhere.OR = [
             { class_code: { contains: searchStr, mode: 'insensitive' } },
             { student_name: { contains: searchStr, mode: 'insensitive' } },
             { phone: { contains: searchStr, mode: 'insensitive' } },
             { address_detail: { contains: searchStr, mode: 'insensitive' } },
             { district: { contains: searchStr, mode: 'insensitive' } },
+            { province: { contains: searchStr, mode: 'insensitive' } },
             { subject: { name: { contains: searchStr, mode: 'insensitive' } } },
+            ...(searchGradeEnum ? [{ grade_level: searchGradeEnum }] : []),
           ];
         }
 
@@ -835,13 +843,17 @@ export const classRequestController = {
       const offlineClassWhere: any = {};
 
       if (searchStr) {
+        const searchGradeEnum = mapToGradeLevel(searchStr);
+
         classRequestWhere.OR = [
           { class_code: { contains: searchStr, mode: 'insensitive' } },
           { student_name: { contains: searchStr, mode: 'insensitive' } },
           { phone: { contains: searchStr, mode: 'insensitive' } },
           { address_detail: { contains: searchStr, mode: 'insensitive' } },
           { district: { contains: searchStr, mode: 'insensitive' } },
+          { province: { contains: searchStr, mode: 'insensitive' } },
           { subject: { name: { contains: searchStr, mode: 'insensitive' } } },
+          ...(searchGradeEnum ? [{ grade_level: searchGradeEnum }] : []),
         ];
 
         const matchingSubjects = await (prisma as any).subject.findMany({
@@ -856,7 +868,9 @@ export const classRequestController = {
           { phone: { contains: searchStr, mode: 'insensitive' } },
           { address_detail: { contains: searchStr, mode: 'insensitive' } },
           { district: { contains: searchStr, mode: 'insensitive' } },
+          { province: { contains: searchStr, mode: 'insensitive' } },
           ...(matchingSubjectIds.length > 0 ? [{ subject_id: { in: matchingSubjectIds } }] : []),
+          ...(searchGradeEnum ? [{ grade_level: searchGradeEnum }] : []),
         ];
       }
 
@@ -1595,6 +1609,129 @@ export const classRequestController = {
     } catch (error: any) {
       console.error('Error in payStudentTuition:', error);
       return res.status(500).json({ message: 'Lỗi khi thanh toán học phí.', error: error.message });
+    }
+  },
+
+  // 9b. Học viên từ chối / hủy lớp trong giai đoạn WAITING_PAYMENT
+  async cancelStudentPayment(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: 'Vui lòng đăng nhập tài khoản Học viên.' });
+      }
+
+      const id = String(req.params.id || '').trim();
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      const isUuid = uuidRegex.test(id);
+
+      const classRequest = await (prisma as any).classRequest.findFirst({
+        where: isUuid
+          ? { OR: [{ request_id: id }, { class_code: id }] }
+          : { class_code: id },
+        include: {
+          student: { select: { user_id: true } },
+          payments: true,
+        },
+      });
+
+      if (!classRequest) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin lớp học.' });
+      }
+
+      if (classRequest.status !== 'WAITING_PAYMENT') {
+        return res.status(400).json({ message: 'Lớp học hiện không ở trạng thái chờ thanh toán (WAITING_PAYMENT).' });
+      }
+
+      let studentProfile: any = null;
+      if (user.user_id && uuidRegex.test(String(user.user_id))) {
+        studentProfile = await (prisma as any).studentProfile.findUnique({
+          where: { user_id: user.user_id },
+        });
+      }
+
+      const userRole = String(user.role || '').toLowerCase();
+      const isOwner =
+        userRole === 'admin' ||
+        (studentProfile && classRequest.student_id === studentProfile.student_id) ||
+        (user.email && classRequest.email && String(classRequest.email).trim().toLowerCase() === String(user.email).trim().toLowerCase());
+
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Bạn không có quyền hủy yêu cầu lớp học này.' });
+      }
+
+      const payments = classRequest.payments || [];
+      const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION');
+      const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
+
+      if (studentPayment && studentPayment.status === 'PAID') {
+        return res.status(400).json({ message: 'Bạn đã hoàn tất nộp học phí. Không thể từ chối thanh toán ở bước này.' });
+      }
+
+      if (studentPayment) {
+        await (prisma as any).offlineClassPayment.update({
+          where: { payment_id: studentPayment.payment_id },
+          data: { status: 'EXPIRED' },
+        });
+      }
+
+      if (tutorPayment && tutorPayment.status === 'PAID') {
+        const refundAmt = Number(tutorPayment.paid_amount || tutorPayment.required_amount || 0);
+        let tutorUserId = tutorPayment.payer_user_id;
+        if (!tutorUserId) {
+          const approvedApp = await (prisma as any).classApplication.findFirst({
+            where: { class_request_id: classRequest.request_id, status: 'APPROVED' },
+            include: { tutor: { select: { user_id: true } } },
+          });
+          tutorUserId = approvedApp?.tutor?.user_id || null;
+        }
+
+        await (prisma as any).offlineClassPayment.update({
+          where: { payment_id: tutorPayment.payment_id },
+          data: { status: 'REFUNDED', refunded_amount: refundAmt, refunded_at: new Date() },
+        });
+
+        if (tutorUserId) {
+          await (prisma as any).wallet.upsert({
+            where: { user_id: tutorUserId },
+            update: { balance: { increment: refundAmt }, updated_at: new Date() },
+            create: { user_id: tutorUserId, balance: refundAmt, currency: 'VND' },
+          });
+
+          await (prisma as any).transaction.create({
+            data: {
+              user_id: tutorUserId,
+              amount: refundAmt,
+              payment_method: 'wallet',
+              description: `Hoàn tiền 100% phí nhận lớp escrow MS:${classRequest.class_code || classRequest.request_id.slice(0, 8)} do Học viên từ chối nhận lớp`,
+              status: 'success',
+              paid_at: new Date(),
+            },
+          });
+        }
+      } else if (tutorPayment) {
+        await (prisma as any).offlineClassPayment.update({
+          where: { payment_id: tutorPayment.payment_id },
+          data: { status: 'EXPIRED' },
+        });
+      }
+
+      await (prisma as any).classApplication.updateMany({
+        where: { class_request_id: classRequest.request_id, status: 'APPROVED' },
+        data: { status: 'EXPIRED' },
+      });
+
+      const updated = await (prisma as any).classRequest.update({
+        where: { request_id: classRequest.request_id },
+        data: { status: 'CANCELLED', selected_tutor_code: null },
+      });
+
+      return res.json({
+        message: 'Bạn đã từ chối nhận lớp và hủy bài đăng thành công.' + (tutorPayment?.status === 'PAID' ? ' Hệ thống đã hoàn 100% phí nhận lớp về ví Gia sư.' : ''),
+        data: formatClassRequestResponse(updated),
+      });
+    } catch (error: any) {
+      console.error('Error in cancelStudentPayment:', error);
+      return res.status(500).json({ message: 'Lỗi khi từ chối thanh toán lớp học.', error: error.message });
     }
   },
 
