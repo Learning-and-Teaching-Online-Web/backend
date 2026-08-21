@@ -1239,6 +1239,7 @@ enum ClassApplicationStatus {
   APPROVED_WAITING_FEE // Được duyệt, đang chờ gia sư thanh toán phí (legacy)
   REJECTED // Bị Admin chủ động từ chối
   EXPIRED // Đã được duyệt (APPROVED) nhưng Gia sư không thanh toán phí nhận lớp kịp hạn -> tự động bỏ lỡ lớp (khác REJECTED vì đây là do Gia sư không hành động, không phải Admin từ chối)
+  CANCELLED // Gia sư chủ động hủy nhận lớp
 }
 
 enum OfflineClassStatus {
