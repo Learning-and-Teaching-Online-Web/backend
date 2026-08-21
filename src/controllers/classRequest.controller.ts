@@ -220,15 +220,25 @@ export async function determineFaultParty(studentPayment: any, tutorPayment: any
 export async function resolveEscrowExpiration(classRequestId: string, faultPartyOverride?: 'STUDENT' | 'TUTOR') {
   const classRequest = await (prisma as any).classRequest.findUnique({
     where: { request_id: classRequestId },
-    include: { payments: true },
+    include: {
+      payments: {
+        include: { transaction: true }
+      }
+    },
   });
 
   if (!classRequest) return null;
   if (classRequest.status !== 'WAITING_PAYMENT') return null;
 
   const payments = classRequest.payments || [];
-  const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION');
-  const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
+  // Prioritize PAID payment record, then PENDING, then any matching type
+  const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION' && p.status === 'PAID')
+    || payments.find((p: any) => p.type === 'STUDENT_TUITION' && p.status === 'PENDING')
+    || payments.find((p: any) => p.type === 'STUDENT_TUITION');
+
+  const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PAID')
+    || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PENDING')
+    || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
 
   const faultParty = (faultPartyOverride === 'STUDENT' || faultPartyOverride === 'TUTOR')
     ? faultPartyOverride
@@ -243,7 +253,7 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
     }
     if (tutorPayment && tutorPayment.status === 'PAID') {
       const refundAmt = Number(tutorPayment.paid_amount || tutorPayment.required_amount || 0);
-      let tutorUserId = tutorPayment.payer_user_id;
+      let tutorUserId = tutorPayment.payer_user_id || tutorPayment.transaction?.user_id || null;
       if (!tutorUserId) {
         const approvedApp = await (prisma as any).classApplication.findFirst({
           where: { class_request_id: classRequestId, status: 'APPROVED' },
@@ -274,8 +284,20 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
             paid_at: new Date(),
           },
         });
+      } else {
+        console.error(`[resolveEscrowExpiration] Cannot resolve tutorUserId for refunding tutorPayment ${tutorPayment.payment_id}`);
       }
+    } else if (tutorPayment) {
+      await (prisma as any).offlineClassPayment.update({
+        where: { payment_id: tutorPayment.payment_id },
+        data: { status: 'EXPIRED' },
+      });
     }
+
+    await (prisma as any).classApplication.updateMany({
+      where: { class_request_id: classRequestId, status: { in: ['APPROVED', 'APPROVED_WAITING_FEE'] } },
+      data: { status: 'EXPIRED' },
+    });
 
     const updated = await (prisma as any).classRequest.update({
       where: { request_id: classRequestId },
@@ -294,7 +316,7 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
     if (studentPayment && studentPayment.status === 'PAID') {
       const refundAmt = Number(studentPayment.paid_amount || studentPayment.required_amount || 0);
 
-      let studentUserId = studentPayment.payer_user_id;
+      let studentUserId = studentPayment.payer_user_id || studentPayment.transaction?.user_id || null;
       if (!studentUserId) {
         if (classRequest.student_id) {
           const sp = await (prisma as any).studentProfile.findUnique({
@@ -334,6 +356,8 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
             paid_at: new Date(),
           },
         });
+      } else {
+        console.error(`[resolveEscrowExpiration] Cannot resolve studentUserId for refunding studentPayment ${studentPayment.payment_id}`);
       }
     }
 
@@ -1418,6 +1442,7 @@ export const classRequestController = {
       await (prisma as any).offlineClassPayment.update({
         where: { payment_id: paymentRecord.payment_id },
         data: {
+          payer_user_id: user.user_id,
           status: 'PAID',
           paid_amount: feeAmount,
           paid_at: new Date(),
@@ -1588,6 +1613,7 @@ export const classRequestController = {
       await (prisma as any).offlineClassPayment.update({
         where: { payment_id: paymentRecord.payment_id },
         data: {
+          payer_user_id: user.user_id,
           status: 'PAID',
           paid_amount: tuitionAmount,
           paid_at: new Date(),
@@ -1630,7 +1656,9 @@ export const classRequestController = {
           : { class_code: id },
         include: {
           student: { select: { user_id: true } },
-          payments: true,
+          payments: {
+            include: { transaction: true }
+          },
         },
       });
 
@@ -1660,8 +1688,13 @@ export const classRequestController = {
       }
 
       const payments = classRequest.payments || [];
-      const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION');
-      const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
+      const studentPayment = payments.find((p: any) => p.type === 'STUDENT_TUITION' && p.status === 'PAID')
+        || payments.find((p: any) => p.type === 'STUDENT_TUITION' && p.status === 'PENDING')
+        || payments.find((p: any) => p.type === 'STUDENT_TUITION');
+
+      const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PAID')
+        || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PENDING')
+        || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
 
       if (studentPayment && studentPayment.status === 'PAID') {
         return res.status(400).json({ message: 'Bạn đã hoàn tất nộp học phí. Không thể từ chối thanh toán ở bước này.' });
@@ -1676,13 +1709,20 @@ export const classRequestController = {
 
       if (tutorPayment && tutorPayment.status === 'PAID') {
         const refundAmt = Number(tutorPayment.paid_amount || tutorPayment.required_amount || 0);
-        let tutorUserId = tutorPayment.payer_user_id;
+        let tutorUserId = tutorPayment.payer_user_id || tutorPayment.transaction?.user_id || null;
         if (!tutorUserId) {
           const approvedApp = await (prisma as any).classApplication.findFirst({
             where: { class_request_id: classRequest.request_id, status: 'APPROVED' },
             include: { tutor: { select: { user_id: true } } },
           });
           tutorUserId = approvedApp?.tutor?.user_id || null;
+        }
+        if (!tutorUserId && classRequest.selected_tutor_code) {
+          const tp = await (prisma as any).tutorProfile.findFirst({
+            where: { tutor_code: { equals: String(classRequest.selected_tutor_code).trim(), mode: 'insensitive' } },
+            select: { user_id: true }
+          });
+          tutorUserId = tp?.user_id || null;
         }
 
         await (prisma as any).offlineClassPayment.update({
@@ -1707,6 +1747,8 @@ export const classRequestController = {
               paid_at: new Date(),
             },
           });
+        } else {
+          console.error(`[cancelStudentPayment] Cannot resolve tutorUserId for refunding tutorPayment ${tutorPayment.payment_id}`);
         }
       } else if (tutorPayment) {
         await (prisma as any).offlineClassPayment.update({
@@ -2050,18 +2092,25 @@ export const classRequestController = {
         );
 
         const payments = cls.payments || [];
-        const tutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PAID') || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.status === 'PENDING') || payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE');
+        const isAssigned = cls.status === 'WAITING_PAYMENT' && (myApp?.status === 'APPROVED' || isDirectedToMe);
+        const myTutorPayment = payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE' && p.payer_user_id === user.user_id)
+          || (isAssigned ? payments.find((p: any) => p.type === 'TUTOR_PLACEMENT_FEE') : null);
+
+        const tutorPaymentStatus = myTutorPayment?.status || 'PENDING';
+        const tutorSpecificPayments = payments.filter((p: any) =>
+          p.type === 'STUDENT_TUITION' || (p.type === 'TUTOR_PLACEMENT_FEE' && p.payer_user_id === user.user_id)
+        );
 
         return {
           ...formatClassRequestResponse(cls),
           is_active_offline_class: false,
           is_directed_to_me: !!isDirectedToMe,
-          is_assigned_to_me: cls.status === 'WAITING_PAYMENT' && (myApp?.status === 'APPROVED' || isDirectedToMe),
+          is_assigned_to_me: isAssigned,
           my_application_status: myApp ? myApp.status : null,
-          tutor_payment_status: tutorPayment?.status || 'PENDING',
-          fee_amount: tutorPayment ? Number(tutorPayment.required_amount) : Number(cls.class_salary) * 0.35,
+          tutor_payment_status: tutorPaymentStatus,
+          fee_amount: myTutorPayment ? Number(myTutorPayment.required_amount) : Number(cls.class_salary) * 0.35,
           payment_deadline: cls.payment_deadline ? (cls.payment_deadline instanceof Date ? cls.payment_deadline.toISOString() : cls.payment_deadline) : undefined,
-          payments: cls.payments || [],
+          payments: tutorSpecificPayments,
         };
       });
 
