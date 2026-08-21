@@ -338,8 +338,8 @@ export async function resolveEscrowExpiration(classRequestId: string, faultParty
     }
 
     await (prisma as any).classApplication.updateMany({
-      where: { class_request_id: classRequestId, status: 'APPROVED' },
-      data: { status: 'EXPIRED' },
+      where: { class_request_id: classRequestId, status: { in: ['APPROVED', 'APPROVED_WAITING_FEE'] } },
+      data: { status: faultPartyOverride === 'TUTOR' ? 'CANCELLED' : 'EXPIRED' },
     });
 
     const updated = await (prisma as any).classRequest.update({
