@@ -1849,14 +1849,35 @@ export const classRequestController = {
     }
   },
 
-  // 12. Học viên cập nhật yêu cầu
+  // 12. Học viên cập nhật yêu cầu (sửa thông tin / gửi lại sau khi bị Admin từ chối)
   async updateMyRequest(req: Request, res: Response) {
     try {
       const user = (req as any).user;
       if (!user) return res.status(401).json({ message: 'Vui lòng đăng nhập.' });
 
       const id = String(req.params.id || '').trim();
-      const { desired_price, class_salary, status } = req.body;
+      const {
+        student_name,
+        phone,
+        email,
+        address_detail,
+        district,
+        province,
+        grade_level,
+        grade_id: input_grade_id,
+        subject_name,
+        subject_id: input_subject_id,
+        num_students,
+        academic_level,
+        sessions_per_week,
+        study_time,
+        tutor_requirement,
+        selected_tutor_code,
+        desired_price,
+        class_salary,
+        other_requirements,
+        status,
+      } = req.body;
 
       const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
       const isUuid = uuidRegex.test(id);
@@ -1886,6 +1907,14 @@ export const classRequestController = {
         return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa yêu cầu lớp học này.' });
       }
 
+      if (['ACTIVE', 'CANCELLED', 'EXPIRED'].includes(existing.status)) {
+        return res.status(400).json({ message: 'Lớp học đã ở trạng thái kết thúc hoặc hủy, không thể chỉnh sửa.' });
+      }
+
+      if (existing.status === 'WAITING_PAYMENT' && status !== 'CANCELLED') {
+        return res.status(400).json({ message: 'Lớp học đang chờ đóng phí escrow, không thể chỉnh sửa thông tin bài đăng lúc này.' });
+      }
+
       // Tự động liên kết student_id nếu lớp chưa được gắn student_id
       if (studentProfile && !existing.student_id) {
         await (prisma as any).classRequest.update({
@@ -1895,12 +1924,44 @@ export const classRequestController = {
       }
 
       const updateData: any = {};
+      if (student_name !== undefined) updateData.student_name = String(student_name).trim();
+      if (phone !== undefined) updateData.phone = String(phone).trim();
+      if (email !== undefined) updateData.email = email ? String(email).trim() : null;
+      if (address_detail !== undefined) updateData.address_detail = String(address_detail).trim();
+      if (district !== undefined) updateData.district = district ? String(district).trim() : null;
+      if (province !== undefined) updateData.province = province ? String(province).trim() : null;
+      if (num_students !== undefined) updateData.num_students = Number(num_students) || 1;
+      if (academic_level !== undefined) updateData.academic_level = academic_level ? String(academic_level).trim() : null;
+      if (sessions_per_week !== undefined) updateData.sessions_per_week = Number(sessions_per_week) || 2;
+      if (study_time !== undefined) updateData.study_time = study_time ? String(study_time).trim() : null;
+      if (tutor_requirement !== undefined) updateData.tutor_requirement = tutor_requirement ? String(tutor_requirement).trim() : null;
+      if (selected_tutor_code !== undefined) updateData.selected_tutor_code = selected_tutor_code ? String(selected_tutor_code).trim() : null;
+      if (other_requirements !== undefined) updateData.other_requirements = other_requirements ? String(other_requirements).trim() : null;
+
       const priceInput = class_salary !== undefined ? class_salary : desired_price;
       if (priceInput !== undefined && priceInput !== null) {
         updateData.class_salary = typeof priceInput === 'number' ? priceInput : Number(String(priceInput || 0).replace(/[^0-9.]/g, '')) || 0;
       }
 
-      if (status && ['CANCELLED', 'OPEN', 'PENDING_ADMIN'].includes(status)) {
+      const gEnum = mapToGradeLevel(grade_level || input_grade_id);
+      if (gEnum) updateData.grade_level = gEnum;
+
+      if (input_subject_id !== undefined) {
+        updateData.subject_id = input_subject_id || null;
+      } else if (subject_name) {
+        const foundSub = await (prisma as any).subject.findFirst({
+          where: { name: { equals: String(subject_name).trim(), mode: 'insensitive' } },
+        });
+        if (foundSub) updateData.subject_id = foundSub.subject_id;
+      }
+
+      // Xử lý chuyển đổi trạng thái
+      if (status === 'CANCELLED') {
+        updateData.status = 'CANCELLED';
+      } else if (existing.status === 'REJECTED') {
+        updateData.status = 'PENDING_ADMIN';
+        updateData.admin_note = 'Học viên đã cập nhật lại thông tin bài đăng và gửi lại cho Admin duyệt.';
+      } else if (status && ['OPEN', 'PENDING_ADMIN'].includes(status)) {
         updateData.status = status;
       }
 
@@ -1911,7 +1972,9 @@ export const classRequestController = {
       });
 
       return res.json({
-        message: 'Cập nhật thông tin lớp yêu cầu thành công!',
+        message: existing.status === 'REJECTED'
+          ? 'Đã cập nhật bài đăng và gửi lại cho Admin duyệt thành công!'
+          : 'Cập nhật thông tin lớp yêu cầu thành công!',
         data: formatClassRequestResponse(updated),
       });
     } catch (error: any) {
