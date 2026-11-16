@@ -26,7 +26,13 @@ jobs:
 
       - name: Generate Prisma Client
         run: npx prisma generate
+        env:
+          DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
 
       - name: Check TypeScript Build
         run: npm run build
+        env:
+          DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
 
