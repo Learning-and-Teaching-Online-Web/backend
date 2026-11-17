@@ -21,3 +21,4 @@ export interface SessionRecord {
   status: SessionStatus;
   course_id?: string;
 }
+

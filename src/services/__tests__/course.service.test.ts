@@ -41,3 +41,4 @@ describe('courseService.generateSessions Integration Test', () => {
     ).toThrowError();
   });
 });
+
