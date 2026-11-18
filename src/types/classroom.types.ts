@@ -16,3 +16,4 @@ export interface ClassroomAccessResponse {
   data?: ClassroomAccessResult;
   error?: string;
 }
+

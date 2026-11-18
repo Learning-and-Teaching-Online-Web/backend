@@ -8,3 +8,4 @@ const classroomRoutes = Router();
 classroomRoutes.get('/:scheduleId/access', verifyAuth, classroomController.checkAccess);
 
 export default classroomRoutes;
+
