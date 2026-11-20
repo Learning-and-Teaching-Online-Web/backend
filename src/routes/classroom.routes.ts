@@ -7,5 +7,8 @@ const classroomRoutes = Router();
 // GET /api/classroom/:scheduleId/access
 classroomRoutes.get('/:scheduleId/access', verifyAuth, classroomController.checkAccess);
 
+// PATCH /api/classroom/:scheduleId/status
+classroomRoutes.patch('/:scheduleId/status', verifyAuth, classroomController.updateStatus);
+
 export default classroomRoutes;
 

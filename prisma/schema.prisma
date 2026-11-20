@@ -479,6 +479,7 @@ model Course {
 // Trạng thái của từng buổi học trong khóa online
 enum SessionStatus {
   upcoming  // Buổi học chưa diễn ra
+  ongoing   // Buổi học đang diễn ra (gia sư đã bấm bắt đầu)
   completed // Gia sư đã dạy xong buổi này
   cancelled // Buổi bị hủy (gia sư xin hoãn hoặc sự cố)
 }

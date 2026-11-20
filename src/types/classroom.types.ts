@@ -17,3 +17,21 @@ export interface ClassroomAccessResponse {
   error?: string;
 }
 
+export type SessionStatusInput = 'ongoing' | 'completed';
+
+export interface UpdateSessionStatusResult {
+  schedule_id: string;
+  course_id: string;
+  previous_status: string;
+  new_status: string;
+  updated_at: Date;
+}
+
+export interface UpdateSessionStatusResponse {
+  success: boolean;
+  message?: string;
+  data?: UpdateSessionStatusResult;
+  error?: string;
+}
+
+
