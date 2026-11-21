@@ -689,5 +689,65 @@ export const courseService = {
       maxStudentsArg,
       courseIdArg
     );
+  },
+
+  // Calculate course progress
+  async calculateCourseProgress(courseId: string, studentId?: string): Promise<number> {
+    return calculateCourseProgress(courseId, studentId);
   }
 };
+
+/**
+ * Tính phần trăm tiến độ học thật của học sinh trong khóa học
+ * Công thức: (buổi đã học / tổng số buổi) * 100
+ * @param courseId ID của khóa học
+ * @param studentId ID của học sinh (tùy chọn)
+ * @returns Tỷ lệ phần trăm tiến độ hoàn thành (0 - 100)
+ */
+export async function calculateCourseProgress(
+  courseId: string,
+  studentId?: string
+): Promise<number> {
+  if (!courseId) return 0;
+
+  // 1. Nếu có studentId và prisma.booking hỗ trợ findFirst, kiểm tra đơn đăng ký hợp lệ
+  if (studentId && (prisma as any)?.booking?.findFirst) {
+    const booking = await (prisma as any).booking.findFirst({
+      where: {
+        course_id: courseId,
+        student_id: studentId,
+        status: { in: ['confirmed', 'completed'] }
+      }
+    });
+
+    if (!booking) {
+      return 0; // Học sinh chưa đăng ký hoặc booking chưa hợp lệ
+    }
+  }
+
+  // 2. Lấy danh sách các buổi học của khóa học từ course_schedules
+  const sessions = await (prisma as any).courseSchedule.findMany({
+    where: { course_id: courseId }
+  });
+
+  const totalSessions = Array.isArray(sessions) ? sessions.length : 0;
+
+  // 3. Xử lý trường hợp khóa học 0 buổi (tránh lỗi chia cho 0 -> NaN)
+  if (totalSessions === 0) {
+    return 0;
+  }
+
+  // 4. Đếm số buổi đã học (status = 'completed')
+  const completedSessions = sessions.filter(
+    (s: any) => s.status === 'completed'
+  ).length;
+
+  if (completedSessions === 0) {
+    return 0;
+  }
+
+  // 5. Tính theo công thức (buổi đã học / tổng số buổi) * 100
+  const progress = (completedSessions / totalSessions) * 100;
+
+  return Math.round(progress * 100) / 100;
+}
