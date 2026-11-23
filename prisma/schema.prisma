@@ -450,12 +450,8 @@ model Course {
 
 // Trạng thái của từng buổi học trong khóa online
 enum SessionStatus {
-<<<<<<< HEAD
   upcoming  // Buổi học chưa diễn ra
   ongoing   // Buổi học đang diễn ra (gia sư đã bấm bắt đầu)
-=======
-  upcoming // Buổi học chưa diễn ra
->>>>>>> 4e41b6b (feat(offline-class): Synchronize Module 12 Offline Class Escrow Payments and 7-Day Refund Tickets)
   completed // Gia sư đã dạy xong buổi này
   cancelled // Buổi bị hủy (gia sư xin hoãn hoặc sự cố)
 }
@@ -707,11 +703,12 @@ model Payout {
   admin_note          String? // Ghi chú của Admin khi xử lý (bắt buộc khi failed)
 
   // 3. Settlement Period & Timestamps
-  period_start        DateTime?    @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
-  period_end          DateTime?    @db.Date // Ngày kết thúc kỳ đối soát doanh thu
   processed_at        DateTime?    @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
   created_at          DateTime     @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
-
+  period_start DateTime? @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
+  period_end   DateTime? @db.Date // Ngày kết thúc kỳ đối soát doanh thu
+  processed_at DateTime? @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
+  created_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
   // Relations
   tutor           TutorProfile @relation(fields: [tutor_id], references: [tutor_id])
   processed_admin User?        @relation(fields: [processed_by], references: [user_id], onDelete: SetNull)
@@ -1283,7 +1280,7 @@ enum RefundTicketStatus {
 
 // ================================================================
 // BẢNG: class_requests
-// Mô tả: Quản lý các đơn đăng ký / bài đăng tìm gia sư dạy kèm Offline của Học viên.
+// Mô tả: Quản lý các đơn đăng ký / bài đăng tìm gia sư dạy kèm Offline của Phụ huynh / Học viên.
 // Luồng: Học viên tạo bài (PENDING_ADMIN/WAITING_TUTOR_CONFIRM) -> Admin duyệt mở lớp (OPEN) -> Gia sư ứng tuyển -> Admin duyệt & gia sư đóng phí -> Chuyển sang bảng offline_classes (đồng thời XÓA record trong class_requests này).
 // Tương tự: "Giỏ hàng" chờ thanh toán.
 // ================================================================
@@ -1296,7 +1293,7 @@ model ClassRequest {
 
   // 2. Code & Student Info
   class_code     String? @unique // Mã lớp học hiển thị (VD: MS: 89513)
-  student_name   String // Họ tên học viên
+  student_name   String // Họ tên học viên / phụ huynh
   phone          String // Số điện thoại liên hệ
   email          String? // Email liên hệ
   address_detail String // Địa chỉ chi tiết (VD: tỉnh lộ 43 - Bình Chiểu)
@@ -1314,9 +1311,9 @@ model ClassRequest {
   other_requirements  String? // Yêu cầu khác
 
   // 4. Status & Administrative Notes
-  status           ClassRequestStatus @default(PENDING_ADMIN)
+  status     ClassRequestStatus @default(PENDING_ADMIN)
   payment_deadline DateTime?          @db.Timestamptz // Hạn chót đóng đủ 2 khoản escrow kể từ khi chuyển WAITING_PAYMENT; NULL nếu chưa vào giai đoạn này. Đọc bởi cron job tự động xử lý trễ hạn (xem src/jobs/escrowExpiration.job.ts)
-  admin_note       String? // Lý do từ chối hoặc ghi chú quản trị của Admin
+  admin_note String? // Lý do từ chối hoặc ghi chú quản trị của Admin
 
   // 5. Timestamps
   created_at DateTime @default(now()) @db.Timestamptz
@@ -1349,7 +1346,7 @@ model OfflineClass {
 
   // 2. Snapshot thông tin lớp học (copy từ ClassRequest tại thời điểm giao)
   class_offline_code String? // Mã lớp gốc (copy từ ClassRequest.class_code)
-  student_name       String // Họ tên học viên
+  student_name       String // Họ tên học viên / phụ huynh
   phone              String // Số điện thoại liên hệ
   email              String? // Email liên hệ
   address_detail     String // Địa chỉ chi tiết
@@ -1405,7 +1402,7 @@ model ClassApplication {
   status          ClassApplicationStatus @default(PENDING)
 
   // 3. Timestamps
-  available_from DateTime? // Ngày giờ có thể bắt đầu nhận lớp sớm nhất
+  available_from DateTime? @db.Date // Ngày có thể bắt đầu nhận lớp sớm nhất
   created_at     DateTime  @default(now()) @db.Timestamptz
   updated_at     DateTime  @default(now()) @db.Timestamptz
 
@@ -1536,8 +1533,8 @@ model ReferencePrice {
   teacher_tutor_price String // e.g. "1100 - 1300" (k/tháng)
 
   // 3. Timestamps
-  created_at          DateTime     @default(now()) @db.Timestamptz
-  updated_at          DateTime     @default(now()) @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
 
   @@map("reference_prices")
 }
