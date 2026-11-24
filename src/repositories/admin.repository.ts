@@ -65,8 +65,8 @@ export const adminRepository = {
       where: { status: 'cancelled' }
     });
 
-    const completionRate = totalBookings > 0 
-      ? Math.round((completedBookings / totalBookings) * 100) 
+    const completionRate = totalBookings > 0
+      ? Math.round((completedBookings / totalBookings) * 100)
       : 0;
 
     return {
@@ -114,7 +114,7 @@ export const adminRepository = {
       ];
     }
 
-    const [users, total] = await prisma.$transaction([
+    const [users, total] = await Promise.all([
       prisma.user.findMany({
         where: whereClause,
         include: {
@@ -184,7 +184,7 @@ export const adminRepository = {
       whereClause.verified_status = filters.verifiedStatus as VerificationStatus;
     }
 
-    const [tutors, total] = await prisma.$transaction([
+    const [tutors, total] = await Promise.all([
       prisma.tutorProfile.findMany({
         where: whereClause,
         include: {
@@ -214,10 +214,13 @@ export const adminRepository = {
     return { tutors: mappedTutors, total };
   },
 
-  async updateTutorVerificationStatus(tutorId: string, status: VerificationStatus) {
+  async updateTutorVerificationStatus(tutorId: string, status: VerificationStatus, adminNote?: string) {
     const profile = await prisma.tutorProfile.update({
       where: { tutor_id: tutorId },
-      data: { verified_status: status }
+      data: {
+        verified_status: status,
+        admin_note: status === 'rejected' ? adminNote : null
+      }
     });
 
     // Automatically update pending certificates matching the profile status
@@ -229,7 +232,7 @@ export const adminRepository = {
     } else if (status === 'rejected') {
       await prisma.tutorCertificate.updateMany({
         where: { tutor_id: tutorId, status: 'pending' },
-        data: { status: 'rejected' }
+        data: { status: 'rejected', admin_note: adminNote }
       });
     }
 
@@ -270,7 +273,7 @@ export const adminRepository = {
       ];
     }
 
-    const [courses, total] = await prisma.$transaction([
+    const [courses, total] = await Promise.all([
       prisma.course.findMany({
         where: whereClause,
         include: {
@@ -318,7 +321,7 @@ export const adminRepository = {
     const limit = filters.limit || 10;
     const skip = (page - 1) * limit;
 
-    const [transactions, total] = await prisma.$transaction([
+    const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
         include: {
           user: {
@@ -367,7 +370,7 @@ export const adminRepository = {
       whereClause.status = filters.status as PayoutStatus;
     }
 
-    const [payouts, total] = await prisma.$transaction([
+    const [payouts, total] = await Promise.all([
       prisma.payout.findMany({
         where: whereClause,
         include: {

@@ -1,10 +1,25 @@
 import { prisma } from '../config/prisma';
 import { supabaseAdmin } from '../config/supabase';
+import { GradeLevel } from '@prisma/client';
+
+function mapGradeIdsToEnums(ids: any[]): GradeLevel[] {
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id: any) => {
+    const str = String(id).trim();
+    if (Object.values(GradeLevel).includes(str as GradeLevel)) return str as GradeLevel;
+    const match = str.match(/(\d+)/);
+    if (match) {
+      const key = `grade_${match[1]}` as keyof typeof GradeLevel;
+      if (key in GradeLevel) return GradeLevel[key];
+    }
+    return null;
+  }).filter(Boolean) as GradeLevel[];
+}
 
 function formatTutorUser(tutor: any) {
   if (!tutor) return tutor;
   const rawName = tutor.full_name;
-  const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (tutor.user?.email ? tutor.user.email.split('@')[0] : 'Giảng viên');
+  const displayName = (rawName && rawName !== 'Người dùng') ? rawName : (tutor.user?.email ? tutor.user.email.split('@')[0] : 'Gia sư');
   tutor.full_name = displayName;
   if (tutor.user) {
     tutor.user.full_name = displayName;
@@ -39,11 +54,6 @@ export const tutorRepository = {
         certificates: {
           orderBy: { created_at: 'desc' }
         },
-        grades: {
-          include: {
-            grade: true
-          }
-        },
         courses: {
           where: { status: 'published' },
           select: {
@@ -70,32 +80,41 @@ export const tutorRepository = {
 
     const result = formatTutorUser(data);
 
-    // Lấy danh sách các lớp offline (ClassRequest) từ database mà gia sư được giao, được học viên chọn, hoặc đã ứng tuyển
+    // Lấy danh sách các lớp offline (ClassRequest & OfflineClass) từ database
     try {
-      const offlineClasses = await prisma.classRequest.findMany({
-        where: {
-          OR: [
-            { assigned_tutor_id: tutorId },
-            { selected_tutor_id: tutorId },
-            { applications: { some: { tutor_id: tutorId } } }
-          ]
-        },
-        include: {
-          student: {
-            select: {
-              full_name: true,
-              avatar_url: true
+      const tutorCode = (result as any).tutor_code;
+      const [requests, activeOfflineClasses] = await Promise.all([
+        prisma.classRequest.findMany({
+          where: {
+            OR: [
+              ...(tutorCode ? [{ selected_tutor_code: { equals: tutorCode, mode: 'insensitive' as const } }] : []),
+              { applications: { some: { tutor_id: tutorId } } }
+            ]
+          },
+          include: {
+            student: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
             }
           },
-          grade: {
-            select: {
-              name: true
+          orderBy: { created_at: 'desc' }
+        }),
+        prisma.offlineClass.findMany({
+          where: { tutor_id: tutorId },
+          include: {
+            student: {
+              select: {
+                full_name: true,
+                avatar_url: true
+              }
             }
-          }
-        },
-        orderBy: { created_at: 'desc' }
-      });
-      (result as any).offline_classes = offlineClasses || [];
+          },
+          orderBy: { created_at: 'desc' }
+        })
+      ]);
+      (result as any).offline_classes = [...(activeOfflineClasses || []), ...(requests || [])];
     } catch (err) {
       console.error('Error fetching offline classes for tutor:', err);
       (result as any).offline_classes = [];
@@ -339,7 +358,7 @@ export const tutorRepository = {
           transaction_id: tx.transaction_id,
           type: (isExpense ? 'expense' : 'earning') as any,
           amount: Number(tx.amount),
-          status: tx.status === 'success' ? ('success' as const) : tx.status === 'pending' ? ('pending' as const) : ('failed' as const),
+          status: (tx.status === 'success' || tx.status === 'refunded') ? (tx.status as any) : tx.status === 'pending' ? ('pending' as const) : ('failed' as const),
           description: tx.description || 'Học phí nhận từ học sinh',
           created_at: tx.created_at
         };
@@ -399,11 +418,6 @@ export const tutorRepository = {
     const includeClause = {
       certificates: {
         orderBy: { created_at: 'desc' as const }
-      },
-      grades: {
-        include: {
-          grade: true
-        }
       },
       available_times: true,
       user: {
@@ -499,21 +513,15 @@ export const tutorRepository = {
       updatePayload.teaching_mode = data.teaching_mode || (data as any).teachingMode;
     }
 
-    // Xử lý lưu các khối lớp nhận dạy vào bảng tutor_grades
+    if (tutor.verified_status === 'rejected') {
+      updatePayload.verified_status = 'pending';
+      updatePayload.admin_note = null;
+    }
+
+    // Xử lý lưu các khối lớp nhận dạy vào mảng grade_levels (GradeLevel[])
     const gradeIds = data.grade_ids || (Array.isArray(data.grades) ? data.grades : undefined);
     if (gradeIds !== undefined && Array.isArray(gradeIds)) {
-      await prisma.tutorGrade.deleteMany({
-        where: { tutor_id: tutor.tutor_id }
-      });
-
-      if (gradeIds.length > 0) {
-        await prisma.tutorGrade.createMany({
-          data: gradeIds.map((gId: string) => ({
-            tutor_id: tutor.tutor_id,
-            grade_id: gId
-          }))
-        });
-      }
+      updatePayload.grade_levels = mapGradeIdsToEnums(gradeIds);
     }
 
     // Xử lý lưu các khung giờ rảnh dạy vào bảng tutor_available_times
@@ -540,11 +548,6 @@ export const tutorRepository = {
       include: {
         certificates: {
           orderBy: { created_at: 'desc' }
-        },
-        grades: {
-          include: {
-            grade: true
-          }
         },
         available_times: true,
         user: {
@@ -635,6 +638,12 @@ export const tutorRepository = {
         expiry_date: data.expiry_date ? new Date(data.expiry_date) : null,
         status: 'pending'
       }
+    });
+
+    // Reset profile status to pending if previously rejected when adding a new certificate
+    await prisma.tutorProfile.updateMany({
+      where: { tutor_id: tutorId, verified_status: 'rejected' },
+      data: { verified_status: 'pending', admin_note: null }
     });
 
     return cert;

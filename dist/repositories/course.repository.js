@@ -32,6 +32,8 @@ exports.courseRepository = {
                         }
                     }
                 },
+                subject_relation: true,
+                course_days: true,
                 schedules: {
                     orderBy: { start_time: 'asc' }
                 },
@@ -105,6 +107,8 @@ exports.courseRepository = {
                             }
                         },
                     },
+                    subject_relation: true,
+                    course_days: true,
                     schedules: {
                         orderBy: { start_time: 'asc' }
                     },
@@ -215,5 +219,19 @@ exports.courseRepository = {
         return await prisma_1.prisma.courseLesson.delete({
             where: { lesson_id: lessonId }
         });
+    },
+    // Sync fixed course_days for a course
+    async syncCourseDays(courseId, days) {
+        await prisma_1.prisma.courseDay.deleteMany({
+            where: { course_id: courseId }
+        });
+        if (Array.isArray(days) && days.length > 0) {
+            await prisma_1.prisma.courseDay.createMany({
+                data: days.map((d) => ({
+                    course_id: courseId,
+                    day_of_week: d
+                }))
+            });
+        }
     }
 };

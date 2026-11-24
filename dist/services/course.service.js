@@ -3,6 +3,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.courseService = void 0;
 const course_repository_1 = require("../repositories/course.repository");
 const tutor_repository_1 = require("../repositories/tutor.repository");
+const prisma_1 = require("../config/prisma");
+async function getOrCreateSubjectId(subjectName) {
+    const name = subjectName.trim();
+    let subject = await prisma_1.prisma.subject.findUnique({
+        where: { name }
+    });
+    if (!subject) {
+        subject = await prisma_1.prisma.subject.create({
+            data: { name }
+        });
+    }
+    return subject.subject_id;
+}
 exports.courseService = {
     // Create a new course
     async createCourse(userId, courseData) {
@@ -10,7 +23,7 @@ exports.courseService = {
         if (!tutor) {
             throw new Error('Gia sư chưa thiết lập hồ sơ. Vui lòng tạo hồ sơ gia sư trước.');
         }
-        const { title, subject, description, price, type, start_date, end_date, duration_months, duration_minutes, max_students, total_sessions, level, thumbnail_url, tags } = courseData;
+        const { title, subject, description, price, type, start_date, duration_minutes, max_students, total_sessions, level, thumbnail_url } = courseData;
         // Validations
         if (!title || !subject || price === undefined) {
             throw new Error('Tiêu đề, môn học và giá tiền không được để trống');
@@ -21,24 +34,27 @@ exports.courseService = {
         if (duration_minutes && Number(duration_minutes) <= 0) {
             throw new Error('Thời lượng buổi học phải lớn hơn 0');
         }
+        const subjectId = await getOrCreateSubjectId(subject);
         const payload = {
             tutor_id: tutor.tutor_id,
             title,
-            subject,
+            subject_id: subjectId,
             description,
             price: Number(price),
             type: type || 'online',
             start_date: start_date ? new Date(start_date) : null,
-            end_date: end_date ? new Date(end_date) : null,
-            duration_months: duration_months ? Number(duration_months) : null,
             duration_minutes: Number(duration_minutes) || 60,
             max_students: Number(max_students) || 1,
             total_sessions: Number(total_sessions) || 1,
             level,
-            thumbnail_url,
-            tags: tags || []
+            thumbnail_url
         };
-        return await course_repository_1.courseRepository.insert(payload);
+        const createdCourse = await course_repository_1.courseRepository.insert(payload);
+        const courseDays = courseData.course_days || courseData.courseDays;
+        if (Array.isArray(courseDays)) {
+            await course_repository_1.courseRepository.syncCourseDays(createdCourse.course_id, courseDays);
+        }
+        return await course_repository_1.courseRepository.findById(createdCourse.course_id);
     },
     // Update a course details
     async updateCourse(userId, courseId, courseData) {
@@ -56,19 +72,22 @@ exports.courseService = {
         // Filter fields to update
         const updatePayload = {};
         const allowedFields = [
-            'title', 'subject', 'description', 'price', 'type', 'start_date', 'end_date',
-            'duration_months', 'duration_minutes', 'max_students', 'total_sessions',
-            'level', 'status', 'thumbnail_url', 'tags'
+            'title', 'description', 'price', 'type', 'start_date',
+            'duration_minutes', 'max_students', 'total_sessions',
+            'level', 'status', 'thumbnail_url'
         ];
+        if (courseData.subject !== undefined) {
+            updatePayload.subject_id = await getOrCreateSubjectId(courseData.subject);
+        }
         allowedFields.forEach(field => {
             if (courseData[field] !== undefined) {
                 if (field === 'price' && Number(courseData[field]) < 0) {
                     throw new Error('Giá tiền không được nhỏ hơn 0');
                 }
-                if (['start_date', 'end_date'].includes(field)) {
+                if (field === 'start_date') {
                     updatePayload[field] = courseData[field] ? new Date(courseData[field]) : null;
                 }
-                else if (['duration_months', 'duration_minutes', 'max_students', 'total_sessions'].includes(field)) {
+                else if (['duration_minutes', 'max_students', 'total_sessions'].includes(field)) {
                     updatePayload[field] = courseData[field] ? Number(courseData[field]) : null;
                 }
                 else {
@@ -76,7 +95,12 @@ exports.courseService = {
                 }
             }
         });
-        return await course_repository_1.courseRepository.update(courseId, updatePayload);
+        const updated = await course_repository_1.courseRepository.update(courseId, updatePayload);
+        const courseDays = courseData.course_days || courseData.courseDays;
+        if (courseDays !== undefined && Array.isArray(courseDays)) {
+            await course_repository_1.courseRepository.syncCourseDays(courseId, courseDays);
+        }
+        return await course_repository_1.courseRepository.findById(courseId);
     },
     // Soft delete / archive a course
     async deleteCourse(userId, courseId) {
@@ -146,11 +170,8 @@ exports.courseService = {
             course_id: courseId,
             start_time: new Date(start_time),
             end_time: new Date(end_time),
-            is_recurring: is_recurring || false,
-            day_of_week,
-            recurrence_end: recurrence_end ? new Date(recurrence_end) : null,
             max_slot: max_slot || course.max_students || 1,
-            is_booked: false
+            booked_count: 0
         };
         return await course_repository_1.courseRepository.addSchedule(payload);
     },

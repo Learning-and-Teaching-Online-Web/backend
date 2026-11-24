@@ -1,4 +1,5 @@
 import { prisma } from '../src/config/prisma';
+import { mapToGradeLevel } from '../src/controllers/classRequest.controller';
 
 async function seedOfflineData() {
   console.log('🌱 Seeding Offline Tutoring Reference Prices & Sample Classes...');
@@ -42,7 +43,7 @@ async function seedOfflineData() {
   const sampleClasses = [
     {
       code: '89513',
-      student_name: 'Phụ huynh em Nam',
+      student_name: 'Học viên Nguyễn Văn Nam',
       phone: '0974502420',
       address_detail: 'tỉnh lộ 43 - Bình Chiểu',
       district: 'Q.Thủ Đức',
@@ -55,12 +56,11 @@ async function seedOfflineData() {
       study_time: 'Dạy 120 phút/ buổi, các tối 18h-20 h',
       tutor_requirement: 'Nữ Sinh Viên',
       desired_price: 2000000,
-      commission_rate: 35,
       status: 'OPEN' as const,
     },
     {
       code: '89507',
-      student_name: 'Phụ huynh em Lan',
+      student_name: 'Học viên Trần Thị Lan',
       phone: '0938708488',
       address_detail: 'Tân Kỳ Tân Quý',
       district: 'Q.Tân Phú',
@@ -73,12 +73,11 @@ async function seedOfflineData() {
       study_time: 'Dạy 120 phút/buổi, T2,4,6 tối 18h',
       tutor_requirement: 'Nữ Sinh Viên',
       desired_price: 2640000,
-      commission_rate: 35,
       status: 'OPEN' as const,
     },
     {
       code: '89511',
-      student_name: 'Phụ huynh em Minh',
+      student_name: 'Học viên Lê Văn Minh',
       phone: '0912345678',
       address_detail: 'Trần Tấn',
       district: 'Q.Thanh Khê',
@@ -91,12 +90,11 @@ async function seedOfflineData() {
       study_time: 'Dạy 120 phút/buổi, T2 đến T6 19h',
       tutor_requirement: 'Nữ Sinh Viên',
       desired_price: 5000000,
-      commission_rate: 30,
       status: 'OPEN' as const,
     },
     {
       code: '89510',
-      student_name: 'Phụ huynh em Đức',
+      student_name: 'Học viên Phạm Minh Đức',
       phone: '0987654321',
       address_detail: 'Lê Đức Thọ - P 15',
       district: 'Q.Gò Vấp',
@@ -109,16 +107,38 @@ async function seedOfflineData() {
       study_time: 'Dạy 90 phút/buổi, T7, CN rảnh',
       tutor_requirement: 'Nữ Giáo Viên',
       desired_price: 2800000,
-      commission_rate: 35,
       status: 'OPEN' as const,
     },
   ];
 
   for (const item of sampleClasses) {
+    const cleanSubject = item.subject_name.split('.')[0].trim();
+    const foundSubject = await (prisma as any).subject.findFirst({
+      where: { name: { contains: cleanSubject, mode: 'insensitive' } },
+    });
+
+    const payload = {
+      class_code: item.code,
+      student_name: item.student_name,
+      phone: item.phone,
+      address_detail: item.address_detail,
+      district: item.district,
+      province: item.province,
+      grade_level: mapToGradeLevel(item.grade_level),
+      subject_id: foundSubject?.subject_id || null,
+      num_students: item.num_students,
+      academic_level: item.academic_level,
+      sessions_per_week: item.sessions_per_week,
+      study_time: item.study_time,
+      tutor_requirement: item.tutor_requirement,
+      class_salary: item.desired_price,
+      status: item.status,
+    };
+
     await (prisma as any).classRequest.upsert({
-      where: { code: item.code },
-      update: item,
-      create: item,
+      where: { class_code: item.code },
+      update: payload,
+      create: payload,
     });
   }
 

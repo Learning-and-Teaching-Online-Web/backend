@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const admin_controller_1 = require("../controllers/admin.controller");
+const classRequest_controller_1 = require("../controllers/classRequest.controller");
+const refundTicket_controller_1 = require("../controllers/refundTicket.controller");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 const adminRoutes = (0, express_1.Router)();
 // Apply auth protection & role check for all admin routes
@@ -25,4 +27,12 @@ adminRoutes.patch('/courses/:courseId/status', admin_controller_1.adminControlle
 adminRoutes.get('/transactions', admin_controller_1.adminController.getTransactions);
 adminRoutes.get('/payouts', admin_controller_1.adminController.getPayouts);
 adminRoutes.patch('/payouts/:payoutId/status', admin_controller_1.adminController.updatePayoutStatus);
+// 6. Offline Class Requests management
+adminRoutes.get('/class-requests', classRequest_controller_1.classRequestController.adminGetAll);
+adminRoutes.patch('/class-requests/:id/approve-open', classRequest_controller_1.classRequestController.adminApproveOpen);
+adminRoutes.patch('/class-requests/:id/assign-tutor', classRequest_controller_1.classRequestController.adminAssignTutor);
+adminRoutes.put('/class-requests/:id', classRequest_controller_1.classRequestController.adminUpdateClassRequest);
+// 7. Refund Tickets management
+adminRoutes.get('/refund-tickets', refundTicket_controller_1.refundTicketController.getTickets);
+adminRoutes.patch('/refund-tickets/:ticketId/process', refundTicket_controller_1.refundTicketController.adminProcessTicket);
 exports.default = adminRoutes;
