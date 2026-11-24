@@ -703,12 +703,10 @@ model Payout {
   admin_note          String? // Ghi chú của Admin khi xử lý (bắt buộc khi failed)
 
   // 3. Settlement Period & Timestamps
+  period_start        DateTime?    @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
+  period_end          DateTime?    @db.Date // Ngày kết thúc kỳ đối soát doanh thu
   processed_at        DateTime?    @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
   created_at          DateTime     @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
-  period_start DateTime? @db.Date // Ngày bắt đầu kỳ đối soát doanh thu
-  period_end   DateTime? @db.Date // Ngày kết thúc kỳ đối soát doanh thu
-  processed_at DateTime? @db.Timestamptz // Thời điểm Admin bấm duyệt hoàn tất chuyển khoản
-  created_at   DateTime  @default(now()) @db.Timestamptz // Thời điểm gửi yêu cầu rút tiền
   // Relations
   tutor           TutorProfile @relation(fields: [tutor_id], references: [tutor_id])
   processed_admin User?        @relation(fields: [processed_by], references: [user_id], onDelete: SetNull)
