@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { reviewRepository } from '../repositories/review.repository';
+import { prisma } from '../config/prisma';
 
 export const reviewController = {
   async getVisibleReviews(req: Request, res: Response): Promise<void> {
@@ -14,7 +15,7 @@ export const reviewController = {
 
   async createReview(req: Request, res: Response): Promise<void> {
     try {
-      const { booking_id, rating, comment, professionalism, communication, punctuality } = req.body;
+      const { booking_id, rating, comment, professionalism, communication, punctuality, schedule_id } = req.body;
 
       if (!booking_id || !rating) {
         res.status(400).json({ success: false, error: 'Mã đặt lớp (booking_id) và số sao đánh giá (rating) là bắt buộc.' });
@@ -34,7 +35,6 @@ export const reviewController = {
       }
 
       // Get booking info to resolve student_id & tutor_id
-      const { prisma } = require('../config/prisma');
       const booking = await prisma.booking.findUnique({
         where: { booking_id },
         include: { 
@@ -55,6 +55,31 @@ export const reviewController = {
         return;
       }
 
+      // BE-D05: Validate trạng thái buổi học nếu có truyền schedule_id
+      if (schedule_id) {
+        const schedule = await prisma.courseSchedule.findUnique({
+          where: { schedule_id },
+          select: { status: true, course_id: true }
+        });
+
+        if (!schedule) {
+          res.status(404).json({
+            success: false,
+            error: 'Không tìm thấy thông tin buổi học.'
+          });
+          return;
+        }
+
+        // Chỉ cho phép đánh giá khi buổi học đã kết thúc (completed)
+        if (schedule.status !== 'completed') {
+          res.status(400).json({
+            success: false,
+            error: 'Chưa thể đánh giá buổi học chưa diễn ra.'
+          });
+          return;
+        }
+      }
+
       // Business Rule Validation:
       // 1. Mandatory: Course must be paid (or confirmed/completed)
       const isPaid = booking.payment_status === 'paid' || booking.status === 'confirmed' || booking.status === 'completed';
@@ -65,9 +90,9 @@ export const reviewController = {
 
       // 2. Course Type logic:
       // - Offline course: User can rate as long as it's purchased/paid
-      // - Online course: User MUST finish/complete the course (booking.status === 'completed') before rating
+      // - Online course: User MUST finish/complete the course (booking.status === 'completed') before rating (unless rating a completed session)
       if (booking.course.type === 'online') {
-        if (booking.status !== 'completed') {
+        if (!schedule_id && booking.status !== 'completed') {
           res.status(400).json({
             success: false,
             error: 'Khóa học Online cần phải kết thúc toàn bộ khóa học (trạng thái Hoàn thành) mới có thể gửi đánh giá.'
@@ -95,7 +120,7 @@ export const reviewController = {
         punctuality: punctuality ? Number(punctuality) : undefined
       });
 
-      res.status(201).json({
+      res.status(200).json({
         success: true,
         message: 'Gửi đánh giá chất lượng giảng dạy thành công!',
         data: review
