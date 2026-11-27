@@ -143,14 +143,44 @@ export const bookingService = {
     }
   },
 
-  // Get bookings for currently logged-in student
+  // Get bookings for currently logged-in student with real course progress
   async getMyBookings(userId: string) {
     const student = await bookingRepository.findStudentProfileByUserId(userId);
     if (!student) {
       return [];
     }
 
-    return await bookingRepository.findByStudentId(student.student_id);
+    const bookings = await bookingRepository.findByStudentId(student.student_id);
+
+    return bookings.map((b: any) => {
+      const schedules = Array.isArray(b.course?.schedules) ? b.course.schedules : [];
+      const isActiveBooking = b.status === 'confirmed' || b.status === 'completed';
+      const courseType = b.course?.type || 'online';
+
+      let totalSessions = schedules.length || Number(b.course?.total_sessions) || 0;
+      let completedSessions = 0;
+      let progress = 0;
+
+      if (courseType === 'online' && schedules.length > 0) {
+        totalSessions = schedules.length;
+        completedSessions = isActiveBooking
+          ? schedules.filter((s: any) => s.status === 'completed').length
+          : 0;
+        progress = totalSessions > 0
+          ? Math.round((completedSessions / totalSessions) * 10000) / 100
+          : 0;
+      } else if (b.status === 'completed') {
+        completedSessions = totalSessions;
+        progress = totalSessions > 0 ? 100 : 0;
+      }
+
+      return {
+        ...b,
+        completed_sessions: completedSessions,
+        total_sessions: totalSessions,
+        progress
+      };
+    });
   },
 
   // Get student wallet balance and transaction logs
