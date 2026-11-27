@@ -268,6 +268,44 @@ async function getOrCreateSubjectId(subjectName: string): Promise<string> {
   return subject.subject_id;
 }
 
+const syncGeneratedCourseSchedules = async (
+  courseId: string,
+  startDate: Date,
+  courseDays: unknown,
+  totalSessions: number,
+  durationMinutes: number,
+  maxStudents: number,
+  scheduleTime?: string
+) => {
+  if (!Array.isArray(courseDays) || courseDays.length === 0 || totalSessions <= 0) {
+    return;
+  }
+
+  const generated = generateSessions({
+    course_id: courseId,
+    start_date: startDate,
+    schedules: courseDays,
+    total_sessions: totalSessions,
+    duration_minutes: durationMinutes || 60,
+    schedule_time: scheduleTime,
+    max_students: maxStudents || 1
+  });
+
+  const schedulesPayload = generated.map((s) => ({
+    course_id: courseId,
+    session_number: s.session_number,
+    title: `Buổi ${s.session_number}`,
+    room_id: `room_${courseId}_s${s.session_number}`,
+    start_time: s.start_time,
+    end_time: s.end_time,
+    max_slot: s.max_slot,
+    booked_count: 0,
+    status: 'upcoming'
+  }));
+
+  await courseRepository.createManySchedules(schedulesPayload);
+};
+
 export const courseService = {
   // Create a new course
   async createCourse(userId: string, courseData: any) {
@@ -325,6 +363,18 @@ export const courseService = {
       await courseRepository.syncCourseDays(createdCourse.course_id, courseDays);
     }
 
+    if (payload.type === 'online' && payload.start_date) {
+      await syncGeneratedCourseSchedules(
+        createdCourse.course_id,
+        payload.start_date,
+        courseDays,
+        payload.total_sessions,
+        payload.duration_minutes,
+        payload.max_students,
+        courseData.schedule_time || courseData.start_time
+      );
+    }
+
     return await courseRepository.findById(createdCourse.course_id);
   },
 
@@ -376,6 +426,34 @@ export const courseService = {
     const courseDays = courseData.course_days || courseData.courseDays;
     if (courseDays !== undefined && Array.isArray(courseDays)) {
       await courseRepository.syncCourseDays(courseId, courseDays);
+    }
+
+    const effectiveType = updatePayload.type ?? course.type;
+    const effectiveStartDate = updatePayload.start_date ?? course.start_date;
+    const effectiveTotalSessions = updatePayload.total_sessions ?? course.total_sessions;
+    const effectiveDuration = updatePayload.duration_minutes ?? course.duration_minutes;
+    const effectiveMaxStudents = updatePayload.max_students ?? course.max_students;
+    const scheduleTime = courseData.schedule_time || courseData.start_time;
+
+    if (
+      course.status !== 'published' &&
+      effectiveType === 'online' &&
+      effectiveStartDate &&
+      Array.isArray(courseDays) &&
+      courseDays.length > 0 &&
+      effectiveTotalSessions > 0 &&
+      scheduleTime
+    ) {
+      await courseRepository.deleteCourseSchedules(courseId);
+      await syncGeneratedCourseSchedules(
+        courseId,
+        effectiveStartDate,
+        courseDays,
+        Number(effectiveTotalSessions),
+        Number(effectiveDuration) || 60,
+        Number(effectiveMaxStudents) || 1,
+        scheduleTime
+      );
     }
 
     return await courseRepository.findById(courseId);

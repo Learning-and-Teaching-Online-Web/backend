@@ -663,9 +663,78 @@ export const tutorRepository = {
     return true;
   },
 
-  // Get ClassSessions (Tạm thời không dùng)
-  async getClassSessions(_tutorId: string) {
-    return [];
+  // Get ClassSessions from course_schedules for Tutor SchedulesTab
+  async getClassSessions(tutorId: string) {
+    const schedules = await (prisma.courseSchedule as any).findMany({
+      where: {
+        course: {
+          tutor_id: tutorId,
+          type: 'online',
+          status: { not: 'archived' }
+        }
+      },
+      include: {
+        course: {
+          select: {
+            course_id: true,
+            title: true,
+            bookings: {
+              where: {
+                status: { in: ['confirmed', 'completed'] }
+              },
+              include: {
+                student: {
+                  select: {
+                    full_name: true,
+                    user: {
+                      select: { email: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: [
+        { course_id: 'asc' },
+        { session_number: 'asc' },
+        { start_time: 'asc' }
+      ]
+    });
+
+    const buildSessionItem = (s: any, sessionId: string, studentName: string) => ({
+      session_id: sessionId,
+      schedule_id: s.schedule_id,
+      course_id: s.course_id,
+      course_title: s.course?.title || 'Khóa học',
+      student_name: studentName,
+      title: s.title || `Buổi ${s.session_number || 1}`,
+      scheduled_start: s.start_time,
+      scheduled_end: s.end_time,
+      room_id: s.room_id,
+      status: s.status
+    });
+
+    const sessions: any[] = [];
+    for (const s of schedules) {
+      const activeBookings = s.course?.bookings || [];
+      if (activeBookings.length > 0) {
+        for (const b of activeBookings) {
+          sessions.push(
+            buildSessionItem(
+              s,
+              `${s.schedule_id}_${b.booking_id}`,
+              b.student?.full_name || b.student?.user?.email || 'Học viên'
+            )
+          );
+        }
+      } else {
+        sessions.push(buildSessionItem(s, s.schedule_id, 'Chưa có học viên'));
+      }
+    }
+
+    return sessions;
   }
 };
 
