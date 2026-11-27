@@ -516,6 +516,8 @@ model CourseSchedule {
 
   // 2. Schedule Details & Slots
   session_number Int           @default(0) @db.SmallInt // Thứ tự buổi học trong khóa (1, 2, ..., total_sessions)
+  title          String?       @db.VarChar(255) // Tiêu đề buổi học (VD: Buổi 1: Giới thiệu)
+  room_id        String?       @db.VarChar(255) // ID phòng học trực tuyến Jitsi
   start_time     DateTime      @db.Timestamptz // Thời điểm bắt đầu buổi học (có kèm múi giờ)
   end_time       DateTime      @db.Timestamptz // Thời điểm kết thúc buổi học (có kèm múi giờ)
   booked_count   Int           @default(0) @db.SmallInt // Số học sinh đã đặt buổi này (tăng khi có Booking confirmed)
