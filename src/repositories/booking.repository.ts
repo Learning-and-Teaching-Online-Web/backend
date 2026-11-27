@@ -35,7 +35,12 @@ export const bookingRepository = {
       include: {
         course: {
           include: {
-            schedules: true,
+            schedules: {
+              orderBy: [
+                { session_number: 'asc' },
+                { start_time: 'asc' }
+              ]
+            },
             tutor: {
               include: {
                 user: {

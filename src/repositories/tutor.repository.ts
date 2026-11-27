@@ -697,44 +697,38 @@ export const tutorRepository = {
         }
       },
       orderBy: [
-        { course_id: 'asc' },
-        { session_number: 'asc' },
-        { start_time: 'asc' }
+        { start_time: 'asc' },
+        { session_number: 'asc' }
       ]
     });
 
-    const buildSessionItem = (s: any, sessionId: string, studentName: string) => ({
-      session_id: sessionId,
-      schedule_id: s.schedule_id,
-      course_id: s.course_id,
-      course_title: s.course?.title || 'Khóa học',
-      student_name: studentName,
-      title: s.title || `Buổi ${s.session_number || 1}`,
-      scheduled_start: s.start_time,
-      scheduled_end: s.end_time,
-      room_id: s.room_id,
-      status: s.status
-    });
-
-    const sessions: any[] = [];
-    for (const s of schedules) {
+    return schedules.map((s: any) => {
       const activeBookings = s.course?.bookings || [];
-      if (activeBookings.length > 0) {
-        for (const b of activeBookings) {
-          sessions.push(
-            buildSessionItem(
-              s,
-              `${s.schedule_id}_${b.booking_id}`,
-              b.student?.full_name || b.student?.user?.email || 'Học viên'
-            )
-          );
-        }
-      } else {
-        sessions.push(buildSessionItem(s, s.schedule_id, 'Chưa có học viên'));
-      }
-    }
+      const students: string[] = Array.from(
+        new Set(
+          activeBookings.map(
+            (b: any) => b.student?.full_name || b.student?.user?.email || 'Học viên'
+          )
+        )
+      );
 
-    return sessions;
+      return {
+        session_id: s.schedule_id,
+        schedule_id: s.schedule_id,
+        course_id: s.course_id,
+        course_title: s.course?.title || 'Khóa học',
+        session_number: s.session_number,
+        title: s.title || `Buổi ${s.session_number || 1}`,
+        scheduled_start: s.start_time,
+        scheduled_end: s.end_time,
+        room_id: s.room_id,
+        status: s.status,
+        booked_count: s.booked_count ?? activeBookings.length,
+        max_slot: s.max_slot ?? 1,
+        students,
+        student_name: students.length > 0 ? students.join(', ') : 'Chưa có học viên'
+      };
+    });
   }
 };
 
