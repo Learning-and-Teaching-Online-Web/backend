@@ -184,6 +184,16 @@ export const courseRepository = {
     return data;
   },
 
+  // Bulk insert generated schedules for a course
+  async createManySchedules(schedulesData: any[]) {
+    if (!Array.isArray(schedulesData) || schedulesData.length === 0) {
+      return { count: 0 };
+    }
+    return await (prisma.courseSchedule as any).createMany({
+      data: schedulesData
+    });
+  },
+
   // Find all schedules of a tutor
   async findSchedulesByTutor(tutorId: string) {
     const schedules = await (prisma.courseSchedule as any).findMany({
